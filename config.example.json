@@ -1,0 +1,9 @@
+{
+  "port": 8080,
+  "https": true,
+  "httpsPort": 8443,
+  "openBrowser": true,
+  "allowRegistration": true,
+  "registrationCode": "",
+  "converters": {}
+}

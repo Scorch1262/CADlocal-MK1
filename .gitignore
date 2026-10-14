@@ -1,0 +1,17 @@
+# Abhängigkeiten / erzeugte Dateien
+node_modules/
+web/vendor/*
+!web/vendor/.gitkeep
+dist/
+tests/.oc.tmp.mjs
+package-lock.json
+
+# Laufzeitdaten (liegen neben der exe)
+config.json
+users.json
+daten/
+cert.pem
+key.pem
+*.exe
+BrowserCAD
+BrowserCAD.app/

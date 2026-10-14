@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BrowserCAD – Nutzer anlegen</title><link rel="stylesheet" href="/assets/common.css"></head>
+<body><div class="auth-wrap"><form class="card" id="f" autocomplete="off">
+<div class="brand"><span class="logo"></span>BrowserCAD</div>
+<p class="sub">Neuen Nutzer anlegen</p>
+<label class="f">Nutzername (3–32 Zeichen: Buchstaben, Ziffern, _ . -)<input id="u" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" autofocus></label>
+<label class="f">Kennwort (mind. 6 Zeichen)<input id="p" type="password" required minlength="6" autocomplete="new-password"></label>
+<label class="f">Kennwort wiederholen<input id="p2" type="password" required minlength="6" autocomplete="new-password"></label>
+<label class="f" id="codeRow" style="display:none">Registrierungscode<input id="c"></label>
+<button class="go" id="b">Nutzer anlegen</button>
+<div class="msg" id="m"></div>
+<div class="alt"><a href="/login">Zurück zur Anmeldung</a></div>
+</form></div>
+<script>
+const m=document.getElementById('m');
+fetch('/api/info').then(r=>r.json()).then(i=>{
+  if(i.codeRequired)document.getElementById('codeRow').style.display='block';
+  if(!i.registration){m.textContent='Die Registrierung ist auf diesem Server deaktiviert.';m.className='msg err';document.getElementById('b').disabled=true;}
+}).catch(()=>{});
+document.getElementById('f').addEventListener('submit',async e=>{
+  e.preventDefault();m.textContent='';m.className='msg';
+  if(p.value!==p2.value){m.textContent='Die Kennwörter stimmen nicht überein.';m.className='msg err';return;}
+  const b=document.getElementById('b');b.disabled=true;
+  try{const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u.value.trim(),password:p.value,code:c.value})});
+    const j=await r.json();if(!r.ok)throw new Error(j.error||'Fehler');location.href='/login?new=1';
+  }catch(err){m.textContent=err.message;m.className='msg err';b.disabled=false;}
+});
+</script></body></html>

@@ -1,0 +1,163 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VERSION: v1.0.${{ github.run_number }}
+
+jobs:
+  # 1) Browser-Bibliotheken holen, Kernel- und Server-Tests ausführen
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Abhängigkeiten installieren (OpenCascade.js, three.js)
+        run: npm install --no-audit --no-fund
+      - name: Vendor-Dateien erzeugen
+        run: node scripts/fetch-vendor.mjs
+      - name: CAD-Kern testen
+        run: node tests/kernel.test.mjs
+      - name: Server prüfen und testen
+        run: |
+          go vet ./...
+          go test ./...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vendor
+          path: web/vendor
+          retention-days: 1
+
+  # 2) Windows-exe
+  windows:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vendor
+          path: web/vendor
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: exe bauen
+        shell: bash
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/BrowserCAD.exe .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BrowserCAD-windows
+          path: dist/BrowserCAD.exe
+
+  # 3) macOS-App (Universal: Apple Silicon + Intel)
+  macos:
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vendor
+          path: web/vendor
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: App bauen
+        run: |
+          set -e
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/bcad-arm64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/bcad-amd64 .
+          lipo -create -output dist/BrowserCAD dist/bcad-arm64 dist/bcad-amd64
+          APP=dist/BrowserCAD.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp dist/BrowserCAD "$APP/Contents/MacOS/BrowserCAD"
+          chmod +x "$APP/Contents/MacOS/BrowserCAD"
+          VNUM="${VERSION#v}"
+          cat > "$APP/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>BrowserCAD</string>
+            <key>CFBundleDisplayName</key><string>BrowserCAD</string>
+            <key>CFBundleIdentifier</key><string>de.browsercad.app</string>
+            <key>CFBundleExecutable</key><string>BrowserCAD</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${VNUM}</string>
+            <key>CFBundleVersion</key><string>${VNUM}</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          # Ad-hoc-Signatur (verhindert "beschädigt"-Meldung auf Apple Silicon; kein Apple-Developer-Zertifikat nötig)
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" dist/BrowserCAD-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BrowserCAD-macos
+          path: dist/BrowserCAD-macOS.zip
+
+  # 4) Linux-Binary (zusätzlich, z. B. für Server)
+  linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vendor
+          path: web/vendor
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Binary bauen
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/BrowserCAD-linux-amd64 .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BrowserCAD-linux
+          path: dist/BrowserCAD-linux-amd64
+
+  # 5) Release automatisch erzeugen
+  release:
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: BrowserCAD-*
+          merge-multiple: true
+      - name: Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: BrowserCAD ${{ env.VERSION }}
+          generate_release_notes: true
+          body: |
+            ## Downloads
+            - **Windows:** `BrowserCAD.exe` – Doppelklick, Browser öffnet sich automatisch.
+            - **macOS:** `BrowserCAD-macOS.zip` – entpacken, Rechtsklick → „Öffnen“ (nicht notarisiert).
+            - **Linux:** `BrowserCAD-linux-amd64`
+
+            Daten (`config.json`, `users.json`, Ordner `daten/`) liegen neben dem Programm. Ausführliche Anleitung: README.md
+          files: |
+            artifacts/BrowserCAD.exe
+            artifacts/BrowserCAD-macOS.zip
+            artifacts/BrowserCAD-linux-amd64

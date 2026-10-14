@@ -1,0 +1,14 @@
+{
+  "name": "browsercad",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BrowserCAD – browserbasiertes CAD als Netzwerk-Webserver (Go-Binary + OpenCascade.js)",
+  "scripts": {
+    "vendor": "node scripts/fetch-vendor.mjs",
+    "test": "node tests/kernel.test.mjs"
+  },
+  "dependencies": {
+    "opencascade.js": "1.1.1",
+    "three": "0.160.0"
+  }
+}

@@ -1,0 +1,19 @@
+BrowserCAD: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
+
+- Go-Server stellt die Webseite im Netzwerk bereit (HTTP 8080, optional HTTPS 8443
+  mit selbstsigniertem Zertifikat)
+- Seite "Nutzer anlegen" (/register) und Anmeldung (/login); das CAD-Programm ist
+  nur nach Anmeldung erreichbar
+- Nutzerdaten in users.json neben der exe im Klartext, Kennwort nur als
+  PBKDF2-SHA256-Hash; eigener Ordner daten/<nutzer>/ wird beim Anlegen erstellt
+- CAD im Browser (OpenCascade.js + three.js), Bedienung an PTC Creo Parametric
+  orientiert: Ribbon, Modellbaum, Ebenen, Dashboard-Leiste, Datumebenen
+- Features: Skizze, Extrusion, Rotation, Bohrung, Rundung, Fase, Linearmuster,
+  Kugel, Kegel, Datumebene; Rückgängig/Wiederholen; Massenanalyse
+- Baugruppen aus Teilen, Fläche-auf-Fläche-Verbindung, Ebenen ein-/ausblenden
+- Import: STEP, STL (Creo/SolidWorks per STEP-Export oder konfigurierbarem
+  Konverter); Export: STEP, STL
+- Automatisches Speichern, Download der .ccad-Datei und aller Dateien als ZIP
+- 3Dconnexion SpaceMouse per WebHID mit einstellbarer Achsenzuordnung
+- GitHub Actions: Tests, Windows-exe, macOS-App (universal), Linux-Binary und
+  automatisches Release

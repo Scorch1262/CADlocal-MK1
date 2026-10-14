@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BrowserCAD – Anmelden</title><link rel="stylesheet" href="/assets/common.css"></head>
+<body><div class="auth-wrap"><form class="card" id="f" autocomplete="on">
+<div class="brand"><span class="logo"></span>BrowserCAD</div>
+<p class="sub">Bitte anmelden</p>
+<label class="f">Nutzername<input id="u" name="username" autocomplete="username" autofocus required></label>
+<label class="f">Kennwort<input id="p" name="password" type="password" autocomplete="current-password" required></label>
+<button class="go" id="b">Anmelden</button>
+<div class="msg" id="m"></div>
+<div class="alt" id="alt"></div>
+</form></div>
+<script>
+const m=document.getElementById('m');
+if(new URLSearchParams(location.search).get('new')){m.textContent='Nutzer angelegt – bitte anmelden.';m.className='msg ok';}
+fetch('/api/info').then(r=>r.json()).then(i=>{if(i.registration)document.getElementById('alt').innerHTML='Noch kein Zugang? <a href="/register">Nutzer anlegen</a>';}).catch(()=>{});
+document.getElementById('f').addEventListener('submit',async e=>{
+  e.preventDefault();const b=document.getElementById('b');b.disabled=true;m.textContent='';m.className='msg';
+  try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u.value,password:p.value})});
+    const j=await r.json();if(!r.ok)throw new Error(j.error||'Fehler');location.href='/';
+  }catch(err){m.textContent=err.message;m.className='msg err';b.disabled=false;}
+});
+</script></body></html>
