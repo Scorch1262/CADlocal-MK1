@@ -1,5 +1,7 @@
 # BrowserCAD
 
+Version: siehe Datei `VERSION` (Basis) – das Release trägt `v<VERSION>.<Lauf-Nr.>`, z. B. `v1.1.7`. Die Version steht in der Konsole, oben im Programm und im Dialog Werkzeuge → Info.
+
 Browserbasiertes CAD-Programm, das als **einzelne Programmdatei** (Windows `.exe`, macOS `.app`, optional Linux) eine Webseite im Netzwerk bereitstellt.
 Die Bedienung und Oberfläche orientieren sich an **PTC Creo Parametric** (Ribbon, Modellbaum, Ebenen, Dashboard-Leiste unten, Datumebenen RIGHT/TOP/FRONT, Y-oben), im dunklen Dashboard-Look.
 

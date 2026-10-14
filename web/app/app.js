@@ -382,6 +382,7 @@ async function boot() {
     const me = await api.me(); S.user = me.username;
     S.info = await api.info();
     $('username').textContent = '👤 ' + S.user;
+    document.querySelector('.qbrand').append(h('small', { class: 'dim', style: { fontWeight: 400, marginLeft: '4px' } }, S.info.version || ''));
   } catch (e) { return; }
   S.viewer = new Viewer($('viewport'));
   S.viewer.onPick = handlePick;

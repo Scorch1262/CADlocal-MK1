@@ -8,15 +8,15 @@ on:
 permissions:
   contents: write
 
-env:
-  VERSION: v1.0.${{ github.run_number }}
-
 jobs:
   # 1) Browser-Bibliotheken holen, Kernel- und Server-Tests ausführen
   prepare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Versionsnummer setzen
+        shell: bash
+        run: echo "VERSION=v$(cat VERSION).${{ github.run_number }}" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -45,6 +45,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Versionsnummer setzen
+        shell: bash
+        run: echo "VERSION=v$(cat VERSION).${{ github.run_number }}" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           name: vendor
@@ -68,6 +71,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Versionsnummer setzen
+        shell: bash
+        run: echo "VERSION=v$(cat VERSION).${{ github.run_number }}" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           name: vendor
@@ -118,6 +124,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Versionsnummer setzen
+        shell: bash
+        run: echo "VERSION=v$(cat VERSION).${{ github.run_number }}" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           name: vendor
@@ -139,6 +148,10 @@ jobs:
     needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Versionsnummer setzen
+        shell: bash
+        run: echo "VERSION=v$(cat VERSION).${{ github.run_number }}" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
