@@ -5,7 +5,7 @@
 .btn:hover{border-color:var(--accent);background:#1f2b47}.btn.small{padding:3px 8px;font-size:12px}.btn.primary,.btn.ok{background:var(--accent);border-color:var(--accent);color:#fff}.btn.ok:hover{background:var(--ok);border-color:var(--ok)}
 .btn.cancel:hover{background:var(--err);border-color:var(--err)}.btn.active{background:var(--accent);border-color:var(--accent);color:#fff}.btn:disabled{opacity:.4;cursor:default}
 #qat{display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
-.qbrand{display:flex;align-items:center;gap:8px;font-weight:700}.qbrand .logo{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#4f86d9,#7bd0ff);display:inline-block}
+.qbrand{display:flex;align-items:center;gap:8px;font-weight:700}.qbrand .logo{width:24px;height:24px;border-radius:6px;background:url(/assets/icon.png) center/cover;display:inline-block}
 #docname{padding:3px 10px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);font-weight:600}#docname.dirty:after{content:" ●";color:var(--warn)}
 #qbtns{display:flex;gap:4px}
 .qb{width:30px;height:30px;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center}.qb:hover{background:var(--panel2);border-color:var(--line)}.qb:disabled{opacity:.3}
@@ -55,3 +55,5 @@ label.field{display:flex;flex-direction:column;gap:4px;color:var(--dim);font-siz
 .dimlabel.user{border-color:#2f6f8f;color:#7fd1ff}.dimlabel.ref{border-color:#2f7a45;color:#9cf0b0}.dimlabel.stale{border-color:#8f2f2f;color:#ff7b72}
 .dimlabel.editable{cursor:text}.dimlabel.editable:hover{background:#26334f;border-color:var(--accent)}.dimlabel.active{background:#0d1220;border-color:var(--accent)}
 .dimedit{width:78px;background:transparent;border:0;outline:0;color:#fff;font:inherit;text-align:center}
+
+.dimunit{color:var(--dim);font-size:11px;margin-left:2px}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -38,6 +37,16 @@ func (a *App) auth(h func(w http.ResponseWriter, r *http.Request, user string)) 
 	}
 }
 
+func (a *App) admin(h func(w http.ResponseWriter, r *http.Request, user string)) http.HandlerFunc {
+	return a.auth(func(w http.ResponseWriter, r *http.Request, user string) {
+		if !a.users.isAdmin(user) {
+			apiErr(w, http.StatusForbidden, "Nur für Administratoren")
+			return
+		}
+		h(w, r, user)
+	})
+}
+
 func (a *App) setCookie(w http.ResponseWriter, r *http.Request, tok string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
 		Name: cookieName, Value: tok, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
@@ -49,15 +58,6 @@ func (a *App) setCookie(w http.ResponseWriter, r *http.Request, tok string, maxA
 var fileRe = regexp.MustCompile(`^[\p{L}\p{N} _.()\-]{1,80}\.ccad$`)
 var typeRe = regexp.MustCompile(`"type"\s*:\s*"(part|assembly)"`)
 
-func isLoopback(r *http.Request) bool {
-	h, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return false
-	}
-	ip := net.ParseIP(h)
-	return ip != nil && ip.IsLoopback()
-}
-
 func (a *App) apiRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
 		var exts []string
@@ -68,7 +68,6 @@ func (a *App) apiRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, map[string]any{
 			"version": version, "registration": a.cfg.AllowRegistration,
 			"codeRequired": a.cfg.RegistrationCode != "", "converters": exts,
-			"local": isLoopback(r),
 		})
 	})
 
@@ -111,6 +110,7 @@ func (a *App) apiRoutes(mux *http.ServeMux) {
 			apiErr(w, 401, "Nutzername oder Kennwort falsch")
 			return
 		}
+		a.users.touchLogin(u.Username)
 		a.setCookie(w, r, a.sess.create(u.Username), 86400)
 		writeJSON(w, 200, map[string]any{"ok": true, "username": u.Username})
 	})
@@ -124,7 +124,7 @@ func (a *App) apiRoutes(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("GET /api/me", a.auth(func(w http.ResponseWriter, r *http.Request, user string) {
-		writeJSON(w, 200, map[string]any{"username": user})
+		writeJSON(w, 200, map[string]any{"username": user, "admin": a.users.isAdmin(user)})
 	}))
 
 	// ----- Dateien des Nutzers -----
@@ -317,13 +317,148 @@ func (a *App) apiRoutes(mux *http.ServeMux) {
 		_, _ = w.Write(b)
 	}))
 
-	// Server beenden – nur von diesem Rechner aus
-	mux.HandleFunc("POST /api/shutdown", a.auth(func(w http.ResponseWriter, r *http.Request, user string) {
-		if !isLoopback(r) {
-			apiErr(w, 403, "Nur lokal erlaubt")
+	a.adminRoutes(mux)
+}
+
+// ---------- Nutzerverwaltung ----------
+
+func (a *App) adminRoutes(mux *http.ServeMux) {
+	type userInfo struct {
+		Username  string `json:"username"`
+		Admin     bool   `json:"admin"`
+		Created   string `json:"created"`
+		LastLogin string `json:"lastLogin"`
+		Files     int    `json:"files"`
+		Bytes     int64  `json:"bytes"`
+	}
+
+	mux.HandleFunc("GET /api/admin/users", a.admin(func(w http.ResponseWriter, r *http.Request, user string) {
+		out := []userInfo{}
+		for _, u := range a.users.snapshot() {
+			ui := userInfo{Username: u.Username, Admin: u.Admin, Created: u.Created, LastLogin: u.LastLogin}
+			ents, _ := os.ReadDir(a.userDir(u.Username))
+			for _, e := range ents {
+				if e.IsDir() || !strings.HasSuffix(e.Name(), ".ccad") {
+					continue
+				}
+				if info, err := e.Info(); err == nil {
+					ui.Files++
+					ui.Bytes += info.Size()
+				}
+			}
+			out = append(out, ui)
+		}
+		writeJSON(w, 200, out)
+	}))
+
+	mux.HandleFunc("POST /api/admin/users", a.admin(func(w http.ResponseWriter, r *http.Request, user string) {
+		var in struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+			Admin    bool   `json:"admin"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
+			apiErr(w, 400, "Ungültige Anfrage")
+			return
+		}
+		generated := ""
+		if in.Password == "" {
+			generated = generatePassword()
+			in.Password = generated
+		}
+		if err := a.createUserRole(strings.TrimSpace(in.Username), in.Password, in.Admin); err != nil {
+			apiErr(w, 400, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "password": generated})
+	}))
+
+	mux.HandleFunc("POST /api/admin/users/{name}/password", a.admin(func(w http.ResponseWriter, r *http.Request, user string) {
+		name := r.PathValue("name")
+		var in struct {
+			Password string `json:"password"`
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in)
+		generated := ""
+		if in.Password == "" {
+			generated = generatePassword()
+			in.Password = generated
+		}
+		if err := a.users.setPassword(name, in.Password); err != nil {
+			apiErr(w, 400, err.Error())
+			return
+		}
+		// alle Sitzungen des Nutzers beenden (eigene Sitzung bleibt bestehen)
+		except := ""
+		if c, err := r.Cookie(cookieName); err == nil && strings.EqualFold(name, user) {
+			except = c.Value
+		}
+		a.sess.destroyUser(name, except)
+		writeJSON(w, 200, map[string]any{"ok": true, "password": generated})
+	}))
+
+	mux.HandleFunc("POST /api/admin/users/{name}/admin", a.admin(func(w http.ResponseWriter, r *http.Request, user string) {
+		var in struct {
+			Admin bool `json:"admin"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+			apiErr(w, 400, "Ungültige Anfrage")
+			return
+		}
+		if err := a.users.setAdmin(r.PathValue("name"), in.Admin); err != nil {
+			apiErr(w, 400, err.Error())
 			return
 		}
 		writeJSON(w, 200, map[string]any{"ok": true})
-		go func() { time.Sleep(300 * time.Millisecond); os.Exit(0) }()
+	}))
+
+	// data=delete -> Ordner endgültig löschen, sonst nach daten/_geloescht verschieben
+	mux.HandleFunc("DELETE /api/admin/users/{name}", a.admin(func(w http.ResponseWriter, r *http.Request, user string) {
+		name := r.PathValue("name")
+		if strings.EqualFold(name, user) {
+			apiErr(w, 400, "Das eigene Konto kann nicht gelöscht werden")
+			return
+		}
+		if err := a.users.remove(name); err != nil {
+			apiErr(w, 400, err.Error())
+			return
+		}
+		a.sess.destroyUser(name, "")
+		dir := a.userDir(name)
+		if r.URL.Query().Get("data") == "delete" {
+			_ = os.RemoveAll(dir)
+		} else if _, err := os.Stat(dir); err == nil {
+			trash := filepath.Join(a.baseDir, "daten", "_geloescht")
+			_ = os.MkdirAll(trash, 0o755)
+			_ = os.Rename(dir, filepath.Join(trash, strings.ToLower(name)+"-"+time.Now().Format("20060102-150405")))
+		}
+		writeJSON(w, 200, map[string]any{"ok": true})
+	}))
+
+	// eigenes Kennwort ändern
+	mux.HandleFunc("POST /api/account/password", a.auth(func(w http.ResponseWriter, r *http.Request, user string) {
+		var in struct {
+			Old string `json:"old"`
+			New string `json:"new"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
+			apiErr(w, 400, "Ungültige Anfrage")
+			return
+		}
+		if _, ok := a.verifyUser(user, in.Old); !ok {
+			time.Sleep(600 * time.Millisecond)
+			apiErr(w, 403, "Das aktuelle Kennwort ist falsch")
+			return
+		}
+		if err := a.users.setPassword(user, in.New); err != nil {
+			apiErr(w, 400, err.Error())
+			return
+		}
+		except := ""
+		if c, err := r.Cookie(cookieName); err == nil {
+			except = c.Value
+		}
+		a.sess.destroyUser(user, except)
+		writeJSON(w, 200, map[string]any{"ok": true})
 	}))
 }

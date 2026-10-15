@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BrowserCAD – Nutzerverwaltung</title>
+<link rel="icon" href="/assets/favicon.ico"><link rel="stylesheet" href="/assets/common.css">
+<style>
+body{overflow:auto}
+.wrap{max-width:980px;margin:0 auto;padding:28px 18px 60px}
+.top{display:flex;align-items:center;gap:14px;margin-bottom:6px}.top .brand{margin:0}.top .sp{flex:1}
+h2{margin:26px 0 10px;font-size:16px;color:var(--dim);font-weight:600;letter-spacing:.3px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse}th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);font-size:14px}th{color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px;background:var(--panel2)}tr:last-child td{border-bottom:0}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:#223a6b;color:#9cc0ff}.badge.no{background:var(--panel2);color:var(--dim)}
+.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:5px 11px;cursor:pointer;font:inherit;font-size:13px;margin-right:4px}.btn:hover{border-color:var(--accent)}.btn.danger:hover{border-color:var(--err);color:var(--err)}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.form{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:14px}
+.form label{display:flex;flex-direction:column;font-size:12px;color:var(--dim);gap:4px}.form input[type=text],.form input[type=password]{padding:8px 10px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px;width:190px}
+.form .chk{flex-direction:row;align-items:center;gap:6px;color:var(--text);padding-bottom:8px}
+.dim{color:var(--dim)}.msg{padding:10px 14px;margin-top:12px;border-radius:8px;font-size:14px}.msg.err{background:#3a1c1c;color:#ff9b94}.msg.ok{background:#173326;color:#8fe0b3}
+.back{position:fixed;inset:0;background:rgba(5,8,16,.65);display:flex;align-items:center;justify-content:center;z-index:9}
+.dlg{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-width:360px;max-width:92vw;padding:0;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.dlg h3{margin:0;padding:14px 18px;border-bottom:1px solid var(--line);font-size:15px}.dlg .b{padding:16px 18px;display:flex;flex-direction:column;gap:10px}.dlg .f{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+.dlg input[type=text],.dlg input[type=password]{padding:8px 10px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;width:100%}
+.pw{font:600 20px ui-monospace,Consolas,monospace;background:var(--bg);border:1px dashed var(--accent);border-radius:8px;padding:12px;text-align:center;user-select:all}
+</style></head>
+<body><div class="wrap">
+<div class="top"><div class="brand"><span class="logo"></span>Nutzerverwaltung</div><span class="sp"></span><span class="dim" id="me"></span><a class="btn" href="/">← Zum CAD-Programm</a></div>
+<div id="msg"></div>
+<h2>NUTZER</h2>
+<div class="panel"><table><thead><tr><th>Nutzer</th><th>Rolle</th><th>Dateien</th><th>Letzte Anmeldung</th><th>Angelegt</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+<h2>NEUEN NUTZER ANLEGEN</h2>
+<div class="panel"><form class="form" id="nf" autocomplete="off">
+<label>Nutzername<input type="text" id="nn" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}"></label>
+<label>Kennwort (leer = zufällig erzeugen)<input type="password" id="np" autocomplete="new-password"></label>
+<label class="chk"><input type="checkbox" id="na">Administrator</label>
+<button class="btn primary" type="submit">Anlegen</button>
+</form></div>
+<p class="dim" style="margin-top:18px">Kennwörter werden nur als Hash gespeichert und können nicht angezeigt, sondern nur neu gesetzt werden. Beim Zurücksetzen werden alle Sitzungen des Nutzers beendet. Gelöschte Nutzer: Der Datenordner wird nach <code>daten/_geloescht/</code> verschoben (oder auf Wunsch endgültig gelöscht).<br>
+Ist kein Administrator mehr erreichbar: auf dem Host im Terminal <code>BrowserCAD --reset-password NAME</code> bzw. <code>--make-admin NAME</code>.</p>
+</div>
+<script>
+const $=id=>document.getElementById(id);let me='';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(method,url,body){const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(r.status===401){location.href='/login';throw new Error('Nicht angemeldet');}
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.statusText);return j;}
+function flash(t,k='ok'){const m=$('msg');m.innerHTML=`<div class="msg ${k}">${esc(t)}</div>`;setTimeout(()=>{if(m.firstChild&&m.firstChild.textContent===t)m.innerHTML=''},6000);}
+function dlg(title,body,buttons){return new Promise(res=>{const back=document.createElement('div');back.className='back';
+  back.innerHTML=`<div class="dlg"><h3>${esc(title)}</h3><div class="b">${body}</div><div class="f"></div></div>`;
+  const f=back.querySelector('.f');const close=v=>{back.remove();res(v)};
+  buttons.forEach(b=>{const e=document.createElement('button');e.className='btn'+(b.primary?' primary':'');e.textContent=b.label;e.onclick=()=>close(b.get?b.get(back):b.value);f.append(e)});
+  back.addEventListener('keydown',e=>{if(e.key==='Escape')close(null);if(e.key==='Enter'&&e.target.tagName==='INPUT'){const p=f.querySelector('.primary');p&&p.click()}});
+  document.body.append(back);const i=back.querySelector('input');i&&i.focus();});}
+const showPw=(user,pw)=>dlg('Neues Kennwort für '+user,`<div>Bitte notieren und dem Nutzer mitteilen – es wird <b>nicht</b> erneut angezeigt:</div><div class="pw">${esc(pw)}</div>`,[{label:'Kopieren',primary:true,get:()=>{navigator.clipboard&&navigator.clipboard.writeText(pw);return true}},{label:'Schließen',value:true}]);
+const fmtD=s=>s?new Date(s).toLocaleString('de-DE'):'–';
+async function load(){
+  const u=await api('GET','/api/admin/users');const rows=$('rows');rows.innerHTML='';
+  u.forEach(x=>{const tr=document.createElement('tr');const self=x.username.toLowerCase()===me.toLowerCase();
+    tr.innerHTML=`<td><b>${esc(x.username)}</b>${self?' <span class="dim">(Sie)</span>':''}</td><td><span class="badge ${x.admin?'':'no'}">${x.admin?'Administrator':'Nutzer'}</span></td><td>${x.files} <span class="dim">(${(x.bytes/1048576).toFixed(1)} MB)</span></td><td>${fmtD(x.lastLogin)}</td><td>${fmtD(x.created)}</td><td></td>`;
+    const td=tr.lastChild;
+    const btn=(t,cls,fn)=>{const b=document.createElement('button');b.className='btn '+(cls||'');b.textContent=t;b.onclick=fn;td.append(b)};
+    btn('Kennwort zurücksetzen','',async()=>{
+      const r=await dlg('Kennwort zurücksetzen: '+x.username,`<label class="dim">Neues Kennwort (leer = zufällig erzeugen)</label><input type="text" id="pw" autocomplete="off">`,[{label:'Abbrechen',value:null},{label:'Zurücksetzen',primary:true,get:b=>b.querySelector('#pw').value}]);
+      if(r===null)return;try{const j=await api('POST','/api/admin/users/'+encodeURIComponent(x.username)+'/password',{password:r});
+        if(j.password)await showPw(x.username,j.password);else flash('Kennwort von '+x.username+' wurde gesetzt.');load();}catch(e){flash(e.message,'err')}});
+    btn(x.admin?'Admin entziehen':'Zum Admin machen','',async()=>{try{await api('POST','/api/admin/users/'+encodeURIComponent(x.username)+'/admin',{admin:!x.admin});load()}catch(e){flash(e.message,'err')}});
+    if(!self)btn('Löschen','danger',async()=>{
+      const r=await dlg('Nutzer löschen: '+x.username,`<div>Der Zugang wird entfernt. Der Datenordner (${x.files} Dateien) wird nach <code>daten/_geloescht/</code> verschoben.</div><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="hard"> Daten endgültig löschen</label>`,[{label:'Abbrechen',value:null},{label:'Löschen',primary:true,get:b=>({hard:b.querySelector('#hard').checked})}]);
+      if(!r)return;try{await api('DELETE','/api/admin/users/'+encodeURIComponent(x.username)+(r.hard?'?data=delete':''));flash(x.username+' wurde gelöscht.');load()}catch(e){flash(e.message,'err')}});
+    rows.append(tr)});
+}
+$('nf').addEventListener('submit',async e=>{e.preventDefault();
+  try{const j=await api('POST','/api/admin/users',{username:$('nn').value.trim(),password:$('np').value,admin:$('na').checked});
+    const name=$('nn').value.trim();$('nf').reset();if(j.password)await showPw(name,j.password);else flash('Nutzer '+name+' angelegt.');load();}catch(err){flash(err.message,'err')}});
+(async()=>{try{const m=await api('GET','/api/me');me=m.username;if(!m.admin){location.href='/';return}$('me').textContent='👤 '+me;load()}catch(e){}})();
+</script></body></html>

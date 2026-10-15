@@ -33,6 +33,7 @@ jobs:
         run: |
           node tests/sketchmath.test.mjs
           node tests/ui.smoke.test.mjs
+          node tests/ops.flow.test.mjs
       - name: Server prüfen und testen
         run: |
           go vet ./...
@@ -59,6 +60,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Programm-Icon in die exe einbetten
+        shell: bash
+        run: |
+          go install github.com/akavel/rsrc@v0.10.2
+          "$(go env GOPATH)/bin/rsrc" -ico build/icon.ico -arch amd64 -o rsrc_windows_amd64.syso
       - name: exe bauen
         shell: bash
         run: |
@@ -91,10 +97,25 @@ jobs:
           mkdir -p dist
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/bcad-arm64 .
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o dist/bcad-amd64 .
-          lipo -create -output dist/BrowserCAD dist/bcad-arm64 dist/bcad-amd64
           APP=dist/BrowserCAD.app
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-          cp dist/BrowserCAD "$APP/Contents/MacOS/BrowserCAD"
+          lipo -create -output "$APP/Contents/Resources/BrowserCAD-server" dist/bcad-arm64 dist/bcad-amd64
+          chmod +x "$APP/Contents/Resources/BrowserCAD-server"
+          # Programm-Icon (.icns) aus dem Iconset erzeugen
+          iconutil -c icns build/icon.iconset -o "$APP/Contents/Resources/icon.icns"
+          # Der Server läuft in einem Terminal-Fenster; Schließen dieses Fensters beendet das Programm.
+          cat > "$APP/Contents/Resources/start.command" <<'CMD'
+          #!/bin/bash
+          cd "$(dirname "$0")"
+          clear
+          exec ./BrowserCAD-server
+          CMD
+          chmod +x "$APP/Contents/Resources/start.command"
+          cat > "$APP/Contents/MacOS/BrowserCAD" <<'LAUNCH'
+          #!/bin/bash
+          DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
+          open -a Terminal "$DIR/start.command"
+          LAUNCH
           chmod +x "$APP/Contents/MacOS/BrowserCAD"
           VNUM="${VERSION#v}"
           cat > "$APP/Contents/Info.plist" <<PLIST
@@ -106,6 +127,7 @@ jobs:
             <key>CFBundleDisplayName</key><string>BrowserCAD</string>
             <key>CFBundleIdentifier</key><string>de.browsercad.app</string>
             <key>CFBundleExecutable</key><string>BrowserCAD</string>
+            <key>CFBundleIconFile</key><string>icon</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleShortVersionString</key><string>${VNUM}</string>
             <key>CFBundleVersion</key><string>${VNUM}</string>
@@ -169,8 +191,8 @@ jobs:
           generate_release_notes: true
           body: |
             ## Downloads
-            - **Windows:** `BrowserCAD.exe` – Doppelklick, Browser öffnet sich automatisch.
-            - **macOS:** `BrowserCAD-macOS.zip` – entpacken, Rechtsklick → „Öffnen“ (nicht notarisiert).
+            - **Windows:** `BrowserCAD.exe` – Doppelklick, Browser öffnet sich automatisch. Beenden: Konsolenfenster schließen.
+            - **macOS:** `BrowserCAD-macOS.zip` – entpacken, Rechtsklick → „Öffnen“ (nicht notarisiert). Es öffnet sich ein Terminal-Fenster; dessen Schließen beendet das Programm.
             - **Linux:** `BrowserCAD-linux-amd64`
 
             Daten (`config.json`, `users.json`, Ordner `daten/`) liegen neben dem Programm. Ausführliche Anleitung: README.md

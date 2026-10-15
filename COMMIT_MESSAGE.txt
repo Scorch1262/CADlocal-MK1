@@ -1,4 +1,4 @@
-BrowserCAD v1.2.0: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
+BrowserCAD v1.3.0: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
 
 - Go-Server stellt die Webseite im Netzwerk bereit (HTTP 8080, optional HTTPS 8443
   mit selbstsigniertem Zertifikat)
@@ -23,3 +23,11 @@ BrowserCAD v1.2.0: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
   (steuernde Maße zwischen Punkten) und für Körper (Referenzmaße)
 - Log-Bereich unten im Bild entfernt (Meldungen nur noch als Hinweis/Statuszeile)
 - Neue Tests: Maß-Logik, Körper-Referenzmaße und Oberfläche (jsdom)
+- Programm-Icon für Windows-exe, macOS-App und Browser (Favicon/Logo)
+- Alle Längenmaße in mm, Einheit wird überall mit angezeigt
+- Rundung/Fase: Live-Vorschau sofort nach dem Anklicken der Kante (Originalkörper als Geist)
+- Programm nicht mehr aus dem Browser beendbar (Endpunkt entfernt); Beenden nur durch
+  Schließen des Terminal-/Konsolenfensters, macOS-App startet dafür ein Terminal-Fenster
+- Nutzerverwaltung (/admin): Rollen, Nutzer anlegen/löschen, Kennwort zurücksetzen,
+  eigenes Kennwort ändern, Host-Notfallbefehle --reset-password / --make-admin
+- Fix: Eingabefelder der Dashboard-Leiste wurden nach dem Maß-Umbau nicht korrekt angezeigt

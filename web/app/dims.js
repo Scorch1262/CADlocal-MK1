@@ -4,7 +4,7 @@
 import * as THREE from '/vendor/three.module.js';
 import { S, on, commit, workingFeatures } from './core.js';
 import { resolveFrame, computeFrames, toGlobal, entityLoops, add, sub, mul, norm } from './model.js';
-import { h, ctxMenu, fmt } from './ui.js';
+import { h, ctxMenu, fmt, mm } from './ui.js';
 import { resolveBodyDim } from './bodydims.js';
 import * as ops from './ops.js';
 
@@ -43,7 +43,8 @@ export class DimLayer {
     if (this.editing) return;
     const inp = h('input', { type: 'number', step: 'any', class: 'dimedit', value: +(+it.value).toFixed(4) });
     this.editing = inp;
-    el.replaceChildren(inp); el.classList.add('active');
+    const unit = /mm$/.test(it.label) ? 'mm' : /°$/.test(it.label) ? '°' : '';
+    el.replaceChildren(inp, ...(unit ? [h('span', { class: 'dimunit' }, unit)] : [])); el.classList.add('active');
     inp.focus(); inp.select();
     const done = ok => {
       if (this.editing !== inp) return;
@@ -134,35 +135,35 @@ export function featureDims(f) {
       const fr = resolveFrame(sk.plane, frames); const bb = sketchBounds(sk); if (!bb) break;
       if (f.type === 'extrude') {
         const d = f.depth * (f.flip ? -1 : 1); const u = bb.maxU, v = (bb.minV + bb.maxV) / 2; const s0 = f.sym ? -d / 2 : 0;
-        items.push(lin(toGlobal(fr, u, v, s0), toGlobal(fr, u, v, s0 + d), fr.x, 40, fmt(Math.abs(f.depth)), f.depth, val => E(t => { if (val < 0) { t.depth = -val; t.flip = !t.flip; } else if (val > 0) t.depth = val; })));
+        items.push(lin(toGlobal(fr, u, v, s0), toGlobal(fr, u, v, s0 + d), fr.x, 40, mm(Math.abs(f.depth)), f.depth, val => E(t => { if (val < 0) { t.depth = -val; t.flip = !t.flip; } else if (val > 0) t.depth = val; })));
       } else items.push(tag(toGlobal(fr, bb.maxU, bb.maxV), `${fmt(f.angle ?? 360)}°`, f.angle ?? 360, pos(v => v > 0 && v <= 360, v => E(t => { t.angle = v; }))));
       break;
     }
     case 'hole': {
       const fr = resolveFrame(f.plane, frames); const C = toGlobal(fr, f.x, f.y);
-      items.push(lin(add(C, mul(fr.x, -f.d / 2)), add(C, mul(fr.x, f.d / 2)), fr.y, 30, 'Ø' + fmt(f.d), f.d, pos(gt0, v => E(t => { t.d = v; }))));
+      items.push(lin(add(C, mul(fr.x, -f.d / 2)), add(C, mul(fr.x, f.d / 2)), fr.y, 30, 'Ø' + mm(f.d), f.d, pos(gt0, v => E(t => { t.d = v; }))));
       const ndir = f.flip ? 1 : -1;
-      if (f.depth > 0) items.push(lin(C, add(C, mul(fr.n, ndir * f.depth)), fr.x, 40, 'T ' + fmt(f.depth), f.depth, pos(v => v >= 0, v => E(t => { t.depth = v; }))));
+      if (f.depth > 0) items.push(lin(C, add(C, mul(fr.n, ndir * f.depth)), fr.x, 40, 'T ' + mm(f.depth), f.depth, pos(v => v >= 0, v => E(t => { t.depth = v; }))));
       else items.push(tag(add(C, mul(fr.y, f.d / 2 + 6)), 'Tiefe: durch', 0, pos(v => v >= 0, v => E(t => { t.depth = v; }))));
-      if (Math.abs(f.x) > 1e-9) items.push(lin(fr.o, toGlobal(fr, f.x, 0), mul(fr.y, -1), 34, 'X ' + fmt(Math.abs(f.x)), Math.abs(f.x), pos(gt0, v => E(t => { t.x = (t.x < 0 ? -1 : 1) * v; }))));
-      if (Math.abs(f.y) > 1e-9) items.push(lin(fr.o, toGlobal(fr, 0, f.y), mul(fr.x, -1), 34, 'Y ' + fmt(Math.abs(f.y)), Math.abs(f.y), pos(gt0, v => E(t => { t.y = (t.y < 0 ? -1 : 1) * v; }))));
+      if (Math.abs(f.x) > 1e-9) items.push(lin(fr.o, toGlobal(fr, f.x, 0), mul(fr.y, -1), 34, 'X ' + mm(Math.abs(f.x)), Math.abs(f.x), pos(gt0, v => E(t => { t.x = (t.x < 0 ? -1 : 1) * v; }))));
+      if (Math.abs(f.y) > 1e-9) items.push(lin(fr.o, toGlobal(fr, 0, f.y), mul(fr.x, -1), 34, 'Y ' + mm(Math.abs(f.y)), Math.abs(f.y), pos(gt0, v => E(t => { t.y = (t.y < 0 ? -1 : 1) * v; }))));
       break;
     }
     case 'sphere': {
       const fr = resolveFrame(f.plane, frames); const C = toGlobal(fr, f.x || 0, f.y || 0);
-      items.push(lin(C, add(C, mul(fr.x, f.r)), fr.y, 24, 'R ' + fmt(f.r), f.r, pos(gt0, v => E(t => { t.r = v; }))));
+      items.push(lin(C, add(C, mul(fr.x, f.r)), fr.y, 24, 'R ' + mm(f.r), f.r, pos(gt0, v => E(t => { t.r = v; }))));
       break;
     }
     case 'cone': {
       const fr = resolveFrame(f.plane, frames); const C = toGlobal(fr, f.x || 0, f.y || 0); const T = add(C, mul(fr.n, f.h));
-      items.push(lin(C, add(C, mul(fr.x, f.r1)), fr.y, 24, 'R1 ' + fmt(f.r1), f.r1, pos(gt0, v => E(t => { t.r1 = v; }))));
-      items.push(lin(C, T, mul(fr.x, -1), 40, 'H ' + fmt(f.h), f.h, pos(gt0, v => E(t => { t.h = v; }))));
-      items.push(lin(T, add(T, mul(fr.x, Math.max(f.r2, 0.001))), fr.y, 24, 'R2 ' + fmt(f.r2), f.r2, pos(v => v >= 0, v => E(t => { t.r2 = v; }))));
+      items.push(lin(C, add(C, mul(fr.x, f.r1)), fr.y, 24, 'R1 ' + mm(f.r1), f.r1, pos(gt0, v => E(t => { t.r1 = v; }))));
+      items.push(lin(C, T, mul(fr.x, -1), 40, 'H ' + mm(f.h), f.h, pos(gt0, v => E(t => { t.h = v; }))));
+      items.push(lin(T, add(T, mul(fr.x, Math.max(f.r2, 0.001))), fr.y, 24, 'R2 ' + mm(f.r2), f.r2, pos(v => v >= 0, v => E(t => { t.r2 = v; }))));
       break;
     }
     case 'datum': {
       const base = resolveFrame({ ref: f.plane.ref, frame: f.plane.frame, offset: 0 }, frames);
-      if (Math.abs(f.plane.offset || 0) > 1e-9) items.push(lin(base.o, add(base.o, mul(base.n, f.plane.offset)), base.x, 40, 'Versatz ' + fmt(f.plane.offset), f.plane.offset, v => E(t => { t.plane.offset = v; })));
+      if (Math.abs(f.plane.offset || 0) > 1e-9) items.push(lin(base.o, add(base.o, mul(base.n, f.plane.offset)), base.x, 40, 'Versatz ' + mm(f.plane.offset), f.plane.offset, v => E(t => { t.plane.offset = v; })));
       break;
     }
     case 'pattern': {
@@ -171,14 +172,14 @@ export function featureDims(f) {
       if (src.type === 'extrude') { const sk = feats.find(x => x.id === src.sketch); if (!sk) break; fr = resolveFrame(sk.plane, frames); const bb = sketchBounds(sk); if (!bb) break; u0 = (bb.minU + bb.maxU) / 2; v0 = (bb.minV + bb.maxV) / 2; }
       else { fr = resolveFrame(src.plane, frames); u0 = src.x || 0; v0 = src.y || 0; }
       const P = i => toGlobal(fr, u0 + f.dx * i, v0 + f.dy * i);
-      if (Math.abs(f.dx) > 1e-9) items.push(lin(P(0), toGlobal(fr, u0 + f.dx, v0), mul(fr.y, -1), 40, 'dX ' + fmt(Math.abs(f.dx)), Math.abs(f.dx), pos(gt0, v => E(t => { t.dx = (t.dx < 0 ? -1 : 1) * v; }))));
-      if (Math.abs(f.dy) > 1e-9) items.push(lin(P(0), toGlobal(fr, u0, v0 + f.dy), mul(fr.x, -1), 40, 'dY ' + fmt(Math.abs(f.dy)), Math.abs(f.dy), pos(gt0, v => E(t => { t.dy = (t.dy < 0 ? -1 : 1) * v; }))));
+      if (Math.abs(f.dx) > 1e-9) items.push(lin(P(0), toGlobal(fr, u0 + f.dx, v0), mul(fr.y, -1), 40, 'dX ' + mm(Math.abs(f.dx)), Math.abs(f.dx), pos(gt0, v => E(t => { t.dx = (t.dx < 0 ? -1 : 1) * v; }))));
+      if (Math.abs(f.dy) > 1e-9) items.push(lin(P(0), toGlobal(fr, u0, v0 + f.dy), mul(fr.x, -1), 40, 'dY ' + mm(Math.abs(f.dy)), Math.abs(f.dy), pos(gt0, v => E(t => { t.dy = (t.dy < 0 ? -1 : 1) * v; }))));
       items.push(tag(P(Math.max((f.count || 2) - 1, 0)), `${f.count}×`, f.count, pos(v => v >= 2, v => E(t => { t.count = Math.round(v); }))));
       break;
     }
     case 'fillet': case 'chamfer': {
       const at = f.edges && f.edges[0] ? f.edges[0] : (S.mesh ? S.mesh.bbox.max : [0, 0, 0]);
-      items.push(tag(at, (f.type === 'fillet' ? 'R ' : 'Fase ') + fmt(f.r), f.r, pos(gt0, v => E(t => { t.r = v; }))));
+      items.push(tag(at, (f.type === 'fillet' ? 'R ' : 'Fase ') + mm(f.r), f.r, pos(gt0, v => E(t => { t.r = v; }))));
       break;
     }
     case 'import': {
@@ -195,7 +196,7 @@ export function bodyDims() {
   const out = [];
   if (S.project.type !== 'part' || !S.mesh) return out;
   for (const d of S.project.dims || []) {
-    const r = resolveBodyDim(S.mesh, d, v => fmt(v));
+    const r = resolveBodyDim(S.mesh, d, v => mm(v));
     const onDelete = () => commit('Maß löschen', p => { p.dims = (p.dims || []).filter(x => x.id !== d.id); }, { light: true });
     if (r.stale) out.push({ kind: 'tag', at: r.at, label: '? veraltet', value: 0, cls: 'stale', onDelete });
     else out.push({ kind: 'lin', a: r.a, b: r.b, base1: r.a, base2: r.b, dir: r.dir, offPx: r.offPx, label: r.label, value: r.value, cls: 'ref', onDelete });

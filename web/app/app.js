@@ -238,7 +238,7 @@ function ribbonDefs() {
       ['Neu', [viewBtn('Teil', 'new', () => createDocument('part')), viewBtn('Baugruppe', 'asm', () => createDocument('assembly'))]],
       ['Datei', [viewBtn('Dateien', 'open', () => showTab('files')), viewBtn('Speichern', 'save', () => save(true)), viewBtn('.ccad laden', 'export', downloadCcad), viewBtn('Alle (ZIP)', 'zip', () => { location.href = '/api/download-all'; })]],
       ['Import / Export', [viewBtn('Importieren', 'import', importFileDialog, { off: !idle }), viewBtn('STEP', 'export', () => exportAs('step')), viewBtn('STL', 'export', () => exportAs('stl'))]],
-      ['Sitzung', [S.info.local ? viewBtn('Server beenden', 'power', async () => { if (await confirmBox('Server beenden', 'BrowserCAD-Server wirklich beenden? Änderungen sind gespeichert.')) { await save(); try { await api.shutdown(); } catch (e) { /* */ } document.body.innerHTML = '<div style="padding:40px">Server beendet. Sie können dieses Fenster schließen.</div>'; } }) : null, viewBtn('Abmelden', 'trash', logout)].filter(Boolean)],
+      ['Sitzung', [viewBtn('Kennwort ändern', 'help', passwordDialog), viewBtn('Abmelden', 'trash', logout)]],
     ],
     modell: [
       ['Datum', [viewBtn('Ebene', 'datum', ops.cmdDatum, { off: !(part && idle) }), viewBtn('Skizze', 'sketch', () => ops.startSketch(), { off: !(part && idle) })]],
@@ -300,8 +300,8 @@ function viewContext(pk, ev) {
     items.push({ label: 'Bohrung hier …', run: () => { S.sel = [pk]; ops.cmdHole(); }, disabled: !isPart() });
   }
   if (pk && pk.type === 'edge' && isPart()) {
-    items.push({ label: 'Rundung …', run: () => { ops.cmdEdgeOp('fillet'); S.sel = [pk]; refreshHighlights(); } });
-    items.push({ label: 'Fase …', run: () => { ops.cmdEdgeOp('chamfer'); S.sel = [pk]; refreshHighlights(); } });
+    items.push({ label: 'Rundung …', run: () => { ops.cmdEdgeOp('fillet'); S.sel = [pk]; refreshHighlights(); ops.dashEdit(() => {}); } });
+    items.push({ label: 'Fase …', run: () => { ops.cmdEdgeOp('chamfer'); S.sel = [pk]; refreshHighlights(); ops.dashEdit(() => {}); } });
   }
   if (pk && pk.type === 'datum' && isPart()) items.push({ label: 'Skizze auf dieser Ebene', run: () => { S.sel = [pk]; ops.startSketch(); } });
   if (pk && isAsm() && pk.itemId && S.project.components.some(c => c.id === pk.itemId)) {
@@ -367,6 +367,19 @@ function showAbout() {
   info('BrowserCAD', [h('p', null, `Version ${S.info.version || ''}`), h('p', { class: 'dim' }, 'CAD-Kern: OpenCascade (über OpenCascade.js, LGPL 2.1). 3D-Darstellung: three.js (MIT). Alle Daten liegen auf dem Server neben der Programmdatei.')]);
 }
 
+async function passwordDialog() {
+  const r = await modal('Kennwort ändern', body => {
+    const o = h('input', { type: 'password', autocomplete: 'current-password', class: 'wide' });
+    const n = h('input', { type: 'password', autocomplete: 'new-password', class: 'wide' });
+    const n2 = h('input', { type: 'password', autocomplete: 'new-password', class: 'wide' });
+    body.append(h('label', { class: 'field' }, h('span', null, 'Aktuelles Kennwort'), o), h('label', { class: 'field' }, h('span', null, 'Neues Kennwort (mind. 6 Zeichen)'), n), h('label', { class: 'field' }, h('span', null, 'Neues Kennwort wiederholen'), n2));
+    return () => ({ o: o.value, n: n.value, n2: n2.value });
+  }, [{ label: 'Abbrechen', value: null }, { label: 'Ändern', primary: true, value: 'form' }]);
+  if (!r) return;
+  if (r.n !== r.n2) { toast('Die neuen Kennwörter stimmen nicht überein.', 'err'); return; }
+  try { await api.changePassword(r.o, r.n); toast('Kennwort geändert.', 'ok'); } catch (e) { toast(e.message, 'err'); }
+}
+
 async function logout() { await save(); await api.logout(); location.href = '/login'; }
 
 // ---------------- Start ----------------
@@ -384,7 +397,9 @@ async function boot() {
   try {
     const me = await api.me(); S.user = me.username;
     S.info = await api.info();
-    $('username').textContent = '👤 ' + S.user;
+    S.admin = !!me.admin;
+    $('username').textContent = '👤 ' + S.user + (S.admin ? ' (Admin)' : '');
+    if (S.admin) { const b = $('adminbtn'); b.hidden = false; b.addEventListener('click', () => window.open('/admin', '_blank')); }
     document.querySelector('.qbrand').append(h('small', { class: 'dim', style: { fontWeight: 400, marginLeft: '4px' } }, S.info.version || ''));
   } catch (e) { return; }
   S.viewer = new Viewer($('viewport'));
@@ -397,6 +412,7 @@ async function boot() {
   initPanels();
   initSpaceMouse();
   $('logoutbtn').addEventListener('click', logout);
+  $('pwbtn').addEventListener('click', passwordDialog);
 
   // zuletzt geöffnete Datei oder erste vorhandene, sonst neues Teil anlegen
   let files = [];

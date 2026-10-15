@@ -25,6 +25,7 @@ export const S = {
   fitNext: true,
   mode: 'idle',
   showDims: true,
+  edgeOp: null,        // aktive Rundung/Fase: { baseMesh } für die Live-Vorschau
   dimLayer: null,
 };
 
@@ -136,7 +137,7 @@ export async function regen(opts = {}) {
   if (token !== regenToken) return;
   if (S.fitNext || opts.fit) { v.fit(); S.fitNext = false; }
   updateDatums();
-  S.sel = S.sel.filter(s => s.type === 'datum');
+  if (!S.edgeOp) S.sel = S.sel.filter(s => s.type === 'datum');   // bei Rundung/Fase bleibt die Kantenauswahl bestehen
   refreshHighlights();
   emit('regen');
   emit('tree');
@@ -154,7 +155,14 @@ function regenPart(p) {
   S.errors = res.errors;
   S.frames = res.frames;
   S.mesh = res.shape ? K.tessellate(res.shape) : null;
-  v.setBodies(S.mesh ? [{ key: 'body', itemId: 'BODY', mesh: S.mesh, color: PALETTE[0], visible: !p.bodyHidden && layerVisible(p, p.bodyLayer) }] : []);
+  const vis = !p.bodyHidden && layerVisible(p, p.bodyLayer);
+  if (S.edgeOp && S.preview && S.edgeOp.baseMesh && S.mesh) {
+    // Live-Vorschau Rundung/Fase: Originalkörper (wählbar) als transparenter Geist, Ergebnis daneben
+    v.setBodies([
+      { key: 'body', itemId: 'BODY', mesh: S.edgeOp.baseMesh, color: PALETTE[0], visible: vis, ghost: true },
+      { key: 'preview', itemId: 'PREVIEW', mesh: S.mesh, color: 0x86dba6, visible: vis, nopick: true },
+    ]);
+  } else v.setBodies(S.mesh ? [{ key: 'body', itemId: 'BODY', mesh: S.mesh, color: PALETTE[0], visible: vis }] : []);
 }
 
 async function loadPart(file) {

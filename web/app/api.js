@@ -24,5 +24,5 @@ export const api = {
   put: (name, json) => req('PUT', '/api/files/' + encodeURIComponent(name), json),
   del: name => req('DELETE', '/api/files/' + encodeURIComponent(name)),
   convert: (fileName, buf) => req('POST', '/api/convert?name=' + encodeURIComponent(fileName), buf, { text: true }),
-  shutdown: () => req('POST', '/api/shutdown'),
+  changePassword: (oldPw, newPw) => req('POST', '/api/account/password', { old: oldPw, new: newPw }),
 };

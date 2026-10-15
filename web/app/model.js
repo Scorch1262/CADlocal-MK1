@@ -22,6 +22,7 @@ export const uid = (p = 'f') => p + Math.random().toString(36).slice(2, 8);
 export function newProject(type = 'part', name = 'neu') {
   return {
     format: FORMAT, version: FORMAT_VERSION, type, name,
+    units: 'mm',      // alle Längen in Millimetern
     created: new Date().toISOString(),
     layers: DEFAULT_LAYERS.map(l => ({ ...l })),
     planesLayer: 'L_DATUM', bodyLayer: 'L_GEOM', planesHidden: false, bodyHidden: false,

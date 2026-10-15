@@ -78,10 +78,12 @@ func checkPassword(pw, stored string) bool {
 // ---------- Nutzerdatei (users.json, Klartext außer dem Kennwort-Hash) ----------
 
 type User struct {
-	Username string `json:"username"`
-	Password string `json:"password"` // nur der Hash, nie das Klartext-Kennwort
-	Created  string `json:"created"`
-	Folder   string `json:"folder"`
+	Username  string `json:"username"`
+	Password  string `json:"password"` // nur der Hash, nie das Klartext-Kennwort
+	Admin     bool   `json:"admin"`
+	Created   string `json:"created"`
+	LastLogin string `json:"lastLogin,omitempty"`
+	Folder    string `json:"folder"`
 }
 
 type UserStore struct {
@@ -106,6 +108,17 @@ func loadUsers(dir string) (*UserStore, error) {
 		return nil, fmt.Errorf("users.json fehlerhaft: %w", err)
 	}
 	s.list = f.Users
+	// Migration / Sicherheitsnetz: mindestens ein Administrator muss existieren
+	if len(s.list) > 0 {
+		has := false
+		for _, u := range s.list {
+			has = has || u.Admin
+		}
+		if !has {
+			s.list[0].Admin = true
+			_ = s.saveLocked()
+		}
+	}
 	return s, nil
 }
 
@@ -135,6 +148,11 @@ func (s *UserStore) find(name string) (User, bool) {
 var userRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{3,32}$`)
 
 func (a *App) createUser(name, pw string) error {
+	return a.createUserRole(name, pw, false)
+}
+
+// createUserRole legt einen Nutzer an. Der allererste Nutzer wird immer Administrator.
+func (a *App) createUserRole(name, pw string, admin bool) error {
 	if !userRe.MatchString(name) {
 		return errors.New("Nutzername: 3–32 Zeichen (Buchstaben, Ziffern, _ . -)")
 	}
@@ -151,8 +169,117 @@ func (a *App) createUser(name, pw string) error {
 	if err := os.MkdirAll(filepath.Join(a.baseDir, folder), 0o755); err != nil {
 		return err
 	}
-	s.list = append(s.list, User{Username: name, Password: hashPassword(pw), Created: time.Now().Format(time.RFC3339), Folder: filepath.ToSlash(folder)})
+	if len(s.list) == 0 {
+		admin = true
+	}
+	s.list = append(s.list, User{Username: name, Password: hashPassword(pw), Admin: admin, Created: time.Now().Format(time.RFC3339), Folder: filepath.ToSlash(folder)})
 	return s.saveLocked()
+}
+
+func validPassword(pw string) error {
+	if len([]rune(pw)) < 6 {
+		return errors.New("Kennwort muss mindestens 6 Zeichen haben")
+	}
+	return nil
+}
+
+func (s *UserStore) indexLocked(name string) int {
+	for i, u := range s.list {
+		if strings.EqualFold(u.Username, name) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (s *UserStore) adminCountLocked() int {
+	n := 0
+	for _, u := range s.list {
+		if u.Admin {
+			n++
+		}
+	}
+	return n
+}
+
+func (s *UserStore) isAdmin(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if i := s.indexLocked(name); i >= 0 {
+		return s.list[i].Admin
+	}
+	return false
+}
+
+func (s *UserStore) setPassword(name, pw string) error {
+	if err := validPassword(pw); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := s.indexLocked(name)
+	if i < 0 {
+		return errors.New("Nutzer nicht gefunden")
+	}
+	s.list[i].Password = hashPassword(pw)
+	return s.saveLocked()
+}
+
+func (s *UserStore) setAdmin(name string, admin bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := s.indexLocked(name)
+	if i < 0 {
+		return errors.New("Nutzer nicht gefunden")
+	}
+	if !admin && s.list[i].Admin && s.adminCountLocked() <= 1 {
+		return errors.New("Der letzte Administrator kann nicht herabgestuft werden")
+	}
+	s.list[i].Admin = admin
+	return s.saveLocked()
+}
+
+func (s *UserStore) touchLogin(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if i := s.indexLocked(name); i >= 0 {
+		s.list[i].LastLogin = time.Now().Format(time.RFC3339)
+		_ = s.saveLocked()
+	}
+}
+
+// remove löscht den Eintrag (Daten werden vom Aufrufer behandelt)
+func (s *UserStore) remove(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := s.indexLocked(name)
+	if i < 0 {
+		return errors.New("Nutzer nicht gefunden")
+	}
+	if s.list[i].Admin && s.adminCountLocked() <= 1 {
+		return errors.New("Der letzte Administrator kann nicht gelöscht werden")
+	}
+	s.list = append(s.list[:i], s.list[i+1:]...)
+	return s.saveLocked()
+}
+
+func (s *UserStore) snapshot() []User {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]User, len(s.list))
+	copy(out, s.list)
+	return out
+}
+
+// Zufallskennwort ohne leicht verwechselbare Zeichen
+func generatePassword() string {
+	const alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	for i := range b {
+		b[i] = alphabet[int(b[i])%len(alphabet)]
+	}
+	return string(b)
 }
 
 func (a *App) verifyUser(name, pw string) (User, bool) {
@@ -211,6 +338,17 @@ func (s *Sessions) get(tok string) (string, bool) {
 	se.exp = time.Now().Add(24 * time.Hour) // gleitend verlängern
 	s.m[tok] = se
 	return se.user, true
+}
+
+// destroyUser beendet alle Sitzungen eines Nutzers (außer der Sitzung except)
+func (s *Sessions) destroyUser(name, except string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for t, se := range s.m {
+		if strings.EqualFold(se.user, name) && t != except {
+			delete(s.m, t)
+		}
+	}
 }
 
 func (s *Sessions) destroy(tok string) {

@@ -39,19 +39,20 @@ p.features.push({ id: 's', type: 'sketch', name: 'Skizze1', plane: { ref: 'FRONT
 S.mesh = { bbox: { min: [-20, -15, 0], max: [20, 15, 20] }, faces: [], edgeRanges: [], edgePositions: new Float32Array(0) };
 
 const labels = f => dims.featureDims(f).map(i => i.label);
-ok('Extrusion: Tiefe-Maß', labels(p.features[1]).join() === '20', labels(p.features[1]).join());
-ok('Bohrung: Ø, Tiefe(durch), X, Y', labels(p.features[2]).length === 4 && labels(p.features[2])[0] === 'Ø8', labels(p.features[2]).join(' | '));
-ok('Muster: dX und Anzahl', labels(p.features[3]).join() === 'dX 12,3×', labels(p.features[3]).join());
-ok('Rundung: Radius-Tag', labels(p.features[4]).join() === 'R 2');
+ok('Extrusion: Tiefe-Maß', labels(p.features[1]).join() === '20 mm', labels(p.features[1]).join());
+ok('Bohrung: Ø, Tiefe(durch), X, Y', labels(p.features[2]).length === 4 && labels(p.features[2])[0] === 'Ø8 mm', labels(p.features[2]).join(' | '));
+ok('Muster: dX und Anzahl', labels(p.features[3]).join() === 'dX 12 mm,3×', labels(p.features[3]).join());
+ok('Rundung: Radius-Tag', labels(p.features[4]).join() === 'R 2 mm');
 
 // Maß im Bild anklicken und ändern -> Feature wird geändert (Commit ohne Dashboard)
 S.selFeature = 'e'; core.emit('sel'); await tick(); await tick();
 let els = [...container.querySelectorAll('.dimlabel')];
-ok('Overlay zeigt Label der gewählten Extrusion', els.length === 1 && els[0].textContent === '20', els.map(e => e.textContent).join());
+ok('Overlay zeigt Label der gewählten Extrusion', els.length === 1 && els[0].textContent === '20 mm', els.map(e => e.textContent).join());
 ok('Label ist positioniert', els[0].style.left.endsWith('px') && els[0].style.display !== 'none', els[0].style.left + ',' + els[0].style.top);
 els[0].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 const inp = container.querySelector('input.dimedit');
 ok('Klick öffnet Eingabefeld', !!inp);
+ok('Eingabefeld zeigt die Einheit mm', container.querySelector('.dimunit')?.textContent === 'mm');
 inp.value = '35'; inp.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 await tick(); await tick();
 ok('Enter übernimmt: depth = 35', S.project.features[1].depth === 35, 'depth=' + S.project.features[1].depth);
@@ -77,12 +78,12 @@ let changed = [];
 const fr = model.BASE_FRAMES.FRONT;
 const sk = new Sketcher(viewer, fr, [{ type: 'rect', cx: 0, cy: 0, w: 40, h: 30, rot: 0 }, { type: 'circle', cx: 10, cy: 5, r: 3 }], k => changed.push(k), []);
 const it = sk.dimItems();
-ok('Skizze: Breite, Höhe, Ø', it.map(i => i.label).join() === '40,30,Ø6', it.map(i => i.label).join());
+ok('Skizze: Breite, Höhe, Ø', it.map(i => i.label).join() === '40 mm,30 mm,Ø6 mm', it.map(i => i.label).join());
 it[0].onEdit(55);
 ok('Skizze: Breite ändern', sk.entities[0].w === 55 && changed.includes('dimedit'));
 sk.dims.push({ id: 'd1', mode: 'h', a: { e: -1, p: 'o' }, b: { e: 1, p: 'c' } });
 const it2 = sk.dimItems(); const u = it2.find(i => i.cls === 'user');
-ok('Bemaßungswerkzeug-Maß angezeigt', !!u && u.label === '10', u && u.label);
+ok('Bemaßungswerkzeug-Maß angezeigt', !!u && u.label === '10 mm', u && u.label);
 u.onEdit(25); ok('Maß ändert Geometrie (Kreis X=25)', sk.entities[1].cx === 25 && sk.entities[1].cy === 5);
 sk.sel = 1; sk.removeSelected(); ok('Entität löschen entfernt zugehöriges Maß', sk.dims.length === 0);
 sk.destroy();

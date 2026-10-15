@@ -2,7 +2,7 @@
 import * as THREE from '/vendor/three.module.js';
 import { toGlobal, entityLoops, uid } from './model.js';
 import { pointOf, snapPoints, measureDim, setDimValue, dropEntityFromDims, autoDims, setAutoDim } from './sketchmath.js';
-import { fmt } from './ui.js';
+import { mm } from './ui.js';
 
 export class Sketcher {
   constructor(viewer, frame, entities, onChange, dims) {
@@ -169,7 +169,7 @@ export class Sketcher {
       items.push({
         kind: 'lin', key: it.key, a: G(...it.a), b: G(...it.b), base1: G(...it.a), base2: G(...it.b),
         dir: it.dir[0] || it.dir[1] ? D(...it.dir) : [0, 0, 0], offPx: it.kind === 'diam' ? 0 : 34,
-        label: (it.kind === 'diam' ? 'Ø' : '') + fmt(it.value), value: it.value,
+        label: (it.kind === 'diam' ? 'Ø' : '') + mm(it.value), value: it.value,
         onEdit: v => { if (setAutoDim(this.entities, it, v)) { this.redraw(); this.onChange('dimedit'); } },
       });
     }
@@ -181,7 +181,7 @@ export class Sketcher {
       else { base1 = G(...A); base2 = G(...B); dir = D(-(B[1] - A[1]), B[0] - A[0]); }
       const value = measureDim(this.entities, d);
       items.push({
-        kind: 'lin', key: d.id, cls: 'user', a: G(...A), b: G(...B), base1, base2, dir, offPx: 34, label: fmt(value), value,
+        kind: 'lin', key: d.id, cls: 'user', a: G(...A), b: G(...B), base1, base2, dir, offPx: 34, label: mm(value), value,
         onEdit: v => { if (setDimValue(this.entities, d, v)) { this.redraw(); this.onChange('dimedit'); } },
         onDelete: () => { this.dims = this.dims.filter(x => x !== d); this.redraw(); this.onChange('dims'); },
       });

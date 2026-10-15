@@ -77,6 +77,7 @@ export function download(name, data, type = 'application/octet-stream') {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
+export const mm = (n, d = 2) => fmt(n, d) + ' mm';   // Alle Längen werden in Millimetern angezeigt
 export const fmt = (n, d = 2) => (Math.abs(n) >= 1e5 ? n.toExponential(3) : (+n.toFixed(d)).toString());
 export function b64encode(bytes) {
   let s = ''; const CH = 0x8000;

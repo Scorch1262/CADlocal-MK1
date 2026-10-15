@@ -1,5 +1,7 @@
 # BrowserCAD
 
+**Programm-Icon:** Würfel mit Bohrung und Maßlinie (`build/icon-1024.png`, `build/icon.ico`, `build/icon.iconset/`) – eingebettet in die Windows-exe (Ressource), in die macOS-App (`icon.icns`) und als Favicon/Logo im Browser.
+
 Version: siehe Datei `VERSION` (Basis) – das Release trägt `v<VERSION>.<Lauf-Nr.>`, z. B. `v1.1.7`. Die Version steht in der Konsole, oben im Programm und im Dialog Werkzeuge → Info.
 
 Browserbasiertes CAD-Programm, das als **einzelne Programmdatei** (Windows `.exe`, macOS `.app`, optional Linux) eine Webseite im Netzwerk bereitstellt.
@@ -13,8 +15,25 @@ Die Bedienung und Oberfläche orientieren sich an **PTC Creo Parametric** (Ribbo
 4. Auf der Seite **„Nutzer anlegen“** (`/register`) Nutzernamen + Kennwort vergeben, danach unter `/login` anmelden.
 5. Andere Rechner im Netzwerk: die in der Konsole angezeigte Adresse benutzen, z. B. `http://192.168.1.20:8080`.
 
-> **macOS:** Die App ist nicht notarisiert. Beim ersten Start Rechtsklick → „Öffnen“. Die Daten werden **neben der .app** gespeichert – die App deshalb in einen eigenen Ordner legen (z. B. `~/BrowserCAD/`), nicht nach `/Programme`.
-> **Windows:** SmartScreen → „Weitere Informationen“ → „Trotzdem ausführen“. Windows-Firewall-Abfrage für private Netzwerke bestätigen.
+> **macOS:** Die App ist nicht notarisiert. Beim ersten Start Rechtsklick → „Öffnen“. Sie öffnet ein **Terminal-Fenster**, in dem der Server läuft. Die Daten werden **neben der .app** gespeichert – die App deshalb in einen eigenen Ordner legen (z. B. `~/BrowserCAD/`), nicht nach `/Programme`.
+> **Windows:** Die exe trägt das Programm-Icon und öffnet ein Konsolenfenster, in dem der Server läuft. SmartScreen → „Weitere Informationen“ → „Trotzdem ausführen“. Windows-Firewall-Abfrage für private Netzwerke bestätigen.
+
+## Programm beenden
+
+Das Programm lässt sich **nicht aus dem Browser heraus beenden** (es gibt dafür keinen Befehl im Server). Beenden geht nur auf dem Host: **Konsolen-/Terminal-Fenster schließen** (oder dort `Strg+C`). Das Schließen des Browserfensters beendet nichts – der Server läuft weiter.
+
+## Nutzerverwaltung
+
+* **Rollen:** Der erste angelegte Nutzer ist **Administrator**. Weitere Administratoren legt man in der Nutzerverwaltung fest. Gibt es (z. B. nach einem Update von einer älteren Version) keinen Administrator, wird der erste Nutzer in `users.json` automatisch einer.
+* **Seite `/admin`** (nur Administratoren; im Programm oben „👥 Nutzerverwaltung“): Nutzerliste mit Rolle, Dateianzahl/-größe, letzter Anmeldung · Nutzer anlegen (Kennwort eintippen oder zufällig erzeugen lassen) · **Kennwort zurücksetzen** (eigenes oder zufällig erzeugtes; alle Sitzungen des Nutzers werden beendet) · Administratorrolle vergeben/entziehen (der letzte Administrator ist geschützt) · Nutzer löschen (Datenordner wird nach `daten/_geloescht/` verschoben oder auf Wunsch endgültig gelöscht).
+* **Eigenes Kennwort ändern:** im Programm oben „🔑 Kennwort“ (altes Kennwort erforderlich).
+* **Notfall auf dem Host** (z. B. Administrator-Kennwort vergessen), im Terminal neben der Programmdatei:
+  ```
+  BrowserCAD --reset-password NAME [NEUES_KENNWORT]   # ohne Angabe wird ein Zufallskennwort ausgegeben
+  BrowserCAD --make-admin NAME
+  ```
+  (macOS: `BrowserCAD.app/Contents/Resources/BrowserCAD-server --reset-password NAME`)
+* Empfehlung: nach dem Anlegen der Nutzer in `config.json` `"allowRegistration": false` setzen – dann legt nur noch der Administrator Nutzer an.
 
 ## Dateien neben der Programmdatei
 
@@ -23,6 +42,7 @@ Die Bedienung und Oberfläche orientieren sich an **PTC Creo Parametric** (Ribbo
 | `config.json` | Ports, Registrierung, Konverter (wird beim ersten Start angelegt) |
 | `users.json` | Nutzerliste im Klartext (Name, Anlagedatum, Ordner) – **das Kennwort nur als PBKDF2-SHA256-Hash** |
 | `daten/<nutzer>/` | Eigener Ordner je Nutzer (wird beim Anlegen erstellt): alle `.ccad`-Dateien, automatisch gespeichert |
+| `daten/_geloescht/` | Datenordner gelöschter Nutzer (zur Sicherheit verschoben, nicht vernichtet) |
 | `cert.pem`, `key.pem` | Selbstsigniertes Zertifikat für HTTPS (wird automatisch erzeugt) |
 
 `config.json`:
@@ -53,6 +73,10 @@ Skizze (Linien/Rechteck/Kreis, Raster, numerische Bearbeitung) auf FRONT/TOP/RIG
 
 **Ansicht:** Standardorientierung, Front/Oben/Rechts/…, perspektivisch/orthogonal, schattiert mit Kanten / schattiert / Drahtmodell / verdeckte Linien / transparent, Datumebenen ein/aus, Bildschirmfoto.
 Navigation wie Creo: Mitteltaste = drehen, Strg+Mitteltaste/Rad = zoomen, Umschalt+Mitteltaste = verschieben (ohne Mittelmaustaste: Alt+Linke Taste).
+
+**Einheiten:** Alle Längenmaße werden **in Millimetern** angegeben und immer mit Einheit angezeigt (`20 mm`, `Ø8 mm`, Winkel in `°`; Eingabefelder tragen `[mm]`). STEP-Dateien werden beim Import nach mm umgerechnet, STL-Dateien gelten als mm.
+
+**Rundung/Fase mit Live-Vorschau:** Schon nach dem Anklicken einer Kante (und bei jeder Radiusänderung) erscheint das Ergebnis – der Originalkörper bleibt als transparenter Geist stehen, damit weitere Kanten gewählt werden können. Erst ✔ übernimmt, ✖ verwirft.
 
 **Maße / Bemaßung:**
 * **Maße im Bild:** Sobald eine Skizze oder ein Feature (Extrusion, Bohrung, Kugel, Kegel, Muster, Rundung …) in Bearbeitung ist – oder im Modellbaum gewählt wird –, werden dessen Maße direkt im Grafikfenster eingeblendet. **Anklicken eines Maßes** öffnet ein Eingabefeld (Enter übernimmt, Esc verwirft); die Geometrie wird sofort neu berechnet. Rechtsklick auf ein Maß: bearbeiten/löschen. Ein-/Ausblenden: Ansicht → „Maße“.
@@ -102,7 +126,8 @@ web/login.html, register.html         Anmelde- und „Nutzer anlegen“-Seite
 web/app.html, web/app/*.js            CAD-Programm (nur nach Anmeldung abrufbar)
 web/vendor/                           wird vom Workflow erzeugt (three.js, OpenCascade.js)
 scripts/fetch-vendor.mjs              kopiert die Bibliotheken nach web/vendor
-tests/*.test.mjs                      Tests: CAD-Kern (Node), Maß-Logik, Oberfläche (jsdom)
+tests/*.test.mjs                      Tests: CAD-Kern, Maß-Logik, Oberfläche und Ablauf Rundung (jsdom)
+build/                                Programm-Icon (PNG, ICO, Iconset)
 .github/workflows/build.yml           Build + Release (exe, macOS-App, Linux)
 ```
 

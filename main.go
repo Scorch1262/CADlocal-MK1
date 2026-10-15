@@ -70,10 +70,10 @@ func baseDir() string {
 		d, _ := os.Getwd()
 		return d
 	}
-	// macOS-App: .../BrowserCAD.app/Contents/MacOS/BrowserCAD -> Ordner neben der .app
-	if runtime.GOOS == "darwin" && strings.Contains(dir, ".app/Contents/MacOS") {
-		for i := 0; i < 3; i++ {
-			dir = filepath.Dir(dir)
+	// macOS-App: .../BrowserCAD.app/Contents/... -> Ordner neben der .app
+	if runtime.GOOS == "darwin" {
+		if i := strings.Index(dir, ".app/Contents"); i >= 0 {
+			dir = filepath.Dir(dir[:i+4])
 		}
 	}
 	return dir
@@ -192,6 +192,18 @@ func (a *App) routes() http.Handler {
 		}
 		a.serveEmbedded(w, r, "login.html", "no-cache")
 	})
+	mux.HandleFunc("GET /admin", func(w http.ResponseWriter, r *http.Request) {
+		u, ok := a.currentUser(r)
+		if !ok {
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+		if !a.users.isAdmin(u) {
+			http.Error(w, "Nur für Administratoren", http.StatusForbidden)
+			return
+		}
+		a.serveEmbedded(w, r, "admin.html", "no-cache")
+	})
 	mux.HandleFunc("GET /register", func(w http.ResponseWriter, r *http.Request) {
 		a.serveEmbedded(w, r, "register.html", "no-cache")
 	})
@@ -267,6 +279,34 @@ func waitForEnter() {
 	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 }
 
+// runCLI behandelt Wartungsbefehle, die nur auf dem Host im Terminal möglich sind.
+func runCLI(app *App, args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	switch args[0] {
+	case "--reset-password":
+		pw := generatePassword()
+		if len(args) >= 3 {
+			pw = args[2]
+		}
+		if err := app.users.setPassword(args[1], pw); err != nil {
+			fmt.Println("Fehler:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Kennwort von %q gesetzt: %s\n", args[1], pw)
+		return true
+	case "--make-admin":
+		if err := app.users.setAdmin(args[1], true); err != nil {
+			fmt.Println("Fehler:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("%q ist jetzt Administrator.\n", args[1])
+		return true
+	}
+	return false
+}
+
 func main() {
 	dir := baseDir()
 	app, err := newApp(dir)
@@ -274,6 +314,9 @@ func main() {
 		fmt.Println("Start fehlgeschlagen:", err)
 		waitForEnter()
 		os.Exit(1)
+	}
+	if runCLI(app, os.Args[1:]) {
+		return
 	}
 	handler := app.routes()
 
@@ -303,7 +346,8 @@ func main() {
 			fmt.Println("        Die SpaceMouse (WebHID) funktioniert nur über HTTPS oder über http://localhost.")
 		}
 	}
-	fmt.Println("\nBeenden mit Strg+C (oder im Programm: Datei > Server beenden, nur lokal).")
+	fmt.Printf("\nNutzerverwaltung (nur Administratoren): http://localhost:%d/admin\n", app.cfg.Port)
+	fmt.Println("\nBeenden: dieses Fenster schließen (oder Strg+C). Aus dem Browser lässt sich das Programm nicht beenden.")
 
 	if app.cfg.OpenBrowser {
 		go func() {

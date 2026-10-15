@@ -22,6 +22,7 @@ function schedulePreview() { clearTimeout(previewTimer); previewTimer = setTimeo
 export function closeDashboard() {
   dash = null; setMode('idle'); S.preview = null;
   const d = $('dash'); d.hidden = true; d.innerHTML = '';
+  S.edgeOp = null;
   S.viewer.filter = { face: true, edge: true, datum: true, body: true };
   cancelPick();
 }
@@ -56,7 +57,7 @@ function planeControls(f, key = 'plane', onChange = () => {}) {
     if (p.ref === 'FACE') opts.push({ v: 'FACE', l: 'Gewählte Fläche' });
     wrap.append(
       field('Ebene', selectCtl(opts, () => p.ref, v => { p.ref = v; onChange(); }, () => {})),
-      field('Versatz', numInput(() => p.offset || 0, v => { p.offset = v; }, { onChange })),
+      field('Versatz [mm]', numInput(() => p.offset || 0, v => { p.offset = v; }, { onChange })),
       h('button', { class: 'btn small', onclick: () => pickOnce('Ebene oder ebene Fläche im Grafikfenster wählen …', pk => pk && (pk.type === 'datum' || (pk.type === 'face' && pk.plane)), pk => {
         if (pk.type === 'datum') { f[key] = { ref: pk.key, offset: 0 }; }
         else f[key] = { ref: 'FACE', offset: 0, frame: faceFrame(pk.plane) };
@@ -78,7 +79,7 @@ function openDashboard({ title, feature, replaceId, controls, preview = true, ok
   const update = () => { if (preview) schedulePreview(); };
   const body = h('div', { class: 'dbody' });
   // Eingabefelder neu aufbauen (z. B. nachdem ein Maß im Bild geändert wurde)
-  const rebuild = () => { body.innerHTML = ''; const ctl = typeof controls === 'function' ? controls(update) : controls; body.append(ctl, hint ? h('span', { class: 'dhint' }, hint) : null); };
+  const rebuild = () => { body.innerHTML = ''; const ctl = typeof controls === 'function' ? controls(update) : controls; body.append(...[].concat(ctl, hint ? h('span', { class: 'dhint' }, hint) : []).flat().filter(Boolean)); };
   rebuild();
   d.append(
     h('div', { class: 'dtitle' }, title),
@@ -98,7 +99,8 @@ export function dashEdit(mut) {
   if (!dash) return false;
   mut(dash.feature);
   if (dash.rebuild) dash.rebuild();
-  if (S.preview) schedulePreview(); else emit('dims');
+  if (dash.afterEdit) dash.afterEdit();
+  else if (S.preview) schedulePreview(); else emit('dims');
   return true;
 }
 on('regen', () => { if (dash && dash.err) dash.err.textContent = S.errors[dash.feature.id] || ''; });
@@ -140,7 +142,7 @@ async function choosePlane() {
   const r = await modal('Skizzenebene wählen', body => {
     const sel = selectCtl(opts, () => 'FRONT', () => {});
     const off = h('input', { type: 'number', value: 0, step: 'any', class: 'num' });
-    body.append(h('p', { class: 'dim' }, 'Tipp: Wählen Sie vorher eine ebene Fläche oder Datumebene im Grafikfenster, um direkt darauf zu skizzieren.'), field('Ebene', sel), field('Versatz', off));
+    body.append(h('p', { class: 'dim' }, 'Tipp: Wählen Sie vorher eine ebene Fläche oder Datumebene im Grafikfenster, um direkt darauf zu skizzieren.'), field('Ebene', sel), field('Versatz [mm]', off));
     return () => ({ ref: sel.value, offset: parseFloat(off.value) || 0 });
   }, [{ label: 'Abbrechen', value: null }, { label: 'Skizze starten', primary: true, value: 'form' }]);
   return r;
@@ -192,15 +194,15 @@ function renderSketchPanel(panel, finish, cancel) {
       checkCtl('Lagemaße', () => sk.showPos, v => { sk.showPos = v; emit('dims'); })),
     sk.tool === 'dim' ? h('div', { class: 'dim small' }, 'Zwei Punkte anklicken (Ecken, Mittelpunkte, Kreisquadranten, Ursprung). Wert im Bild anklicken, um das Maß zu ändern.') : null,
     h('div', { class: 'prow' },
-      field('Raster', numInput(() => sk.snap, v => sk.setSnap(v, sk.snapOn), { step: 'any', min: 0.1 })),
+      field('Raster [mm]', numInput(() => sk.snap, v => sk.setSnap(v, sk.snapOn), { step: 'any', min: 0.1 })),
       checkCtl('Einrasten', () => sk.snapOn, v => sk.setSnap(sk.snap, v))),
   );
   const list = h('div', { class: 'elist' });
   sk.entities.forEach((e, i) => {
     const row = h('div', { class: 'erow' + (i === sk.sel ? ' sel' : ''), onclick: ev => { if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'BUTTON') return; sk.sel = i; sk.redraw(); renderSketchPanel(panel, finish, cancel); } });
     const n = (key, label) => field(label, numInput(() => +(+e[key]).toFixed(4), v => sk.update(i, { [key]: v }), { step: 'any' }));
-    if (e.type === 'rect') row.append(h('b', null, 'Rechteck'), n('cx', 'X'), n('cy', 'Y'), n('w', 'Breite'), n('h', 'Höhe'), n('rot', 'Winkel°'));
-    else if (e.type === 'circle') row.append(h('b', null, 'Kreis'), n('cx', 'X'), n('cy', 'Y'), n('r', 'Radius'));
+    if (e.type === 'rect') row.append(h('b', null, 'Rechteck'), n('cx', 'X [mm]'), n('cy', 'Y [mm]'), n('w', 'Breite [mm]'), n('h', 'Höhe [mm]'), n('rot', 'Winkel [°]'));
+    else if (e.type === 'circle') row.append(h('b', null, 'Kreis'), n('cx', 'X [mm]'), n('cy', 'Y [mm]'), n('r', 'Radius [mm]'));
     else row.append(h('b', null, `Linienzug (${e.pts.length} Punkte)`));
     row.append(h('button', { class: 'btn small', title: 'Löschen', onclick: () => { sk.sel = i; sk.removeSelected(); renderSketchPanel(panel, finish, cancel); } }, '🗑'));
     list.append(row);
@@ -211,7 +213,7 @@ function renderSketchPanel(panel, finish, cancel) {
     sk.dims.forEach(d => {
       const val = measureDim(sk.entities, d);
       list.append(h('div', { class: 'erow' }, h('b', null, { a: 'Abstand', h: 'Horizontal', v: 'Vertikal' }[d.mode]),
-        field('Wert', numInput(() => (val === null ? 0 : +val.toFixed(4)), v => { if (setDimValue(sk.entities, d, v)) { sk.redraw(); sk.onChange('edit'); } }, { step: 'any', min: 0.0001 })),
+        field('Wert [mm]', numInput(() => (val === null ? 0 : +val.toFixed(4)), v => { if (setDimValue(sk.entities, d, v)) { sk.redraw(); sk.onChange('edit'); } }, { step: 'any', min: 0.0001 })),
         h('button', { class: 'btn small', title: 'Maß löschen', onclick: () => { sk.dims = sk.dims.filter(x => x !== d); sk.redraw(); sk.onChange('dims'); } }, '🗑')));
     });
   }
@@ -243,7 +245,7 @@ export function dashExtrude(sketchId, feature, replaceId) {
     controls: up => [
       field('Skizze', selectCtl(sketchOptions(), () => f.sketch, v => { f.sketch = v; }, up)),
       field('Typ', selectCtl(modeOptions, () => f.mode, v => { f.mode = v; }, up)),
-      field('Tiefe', numInput(() => f.depth, v => { f.depth = v; }, { onChange: up })),
+      field('Tiefe [mm]', numInput(() => f.depth, v => { f.depth = v; }, { onChange: up })),
       checkCtl('Symmetrisch', () => f.sym, v => { f.sym = v; }, up),
       checkCtl('Richtung umkehren', () => f.flip, v => { f.flip = v; }, up),
     ],
@@ -257,7 +259,7 @@ export function dashRevolve(sketchId, feature, replaceId) {
       field('Skizze', selectCtl(sketchOptions(), () => f.sketch, v => { f.sketch = v; }, up)),
       field('Achse', selectCtl([{ v: 'y', l: 'Vertikale Skizzenachse (Y)' }, { v: 'x', l: 'Horizontale Skizzenachse (X)' }], () => f.axis, v => { f.axis = v; }, up)),
       field('Typ', selectCtl(modeOptions, () => f.mode, v => { f.mode = v; }, up)),
-      field('Winkel°', numInput(() => f.angle, v => { f.angle = v; }, { onChange: up, min: 1 })),
+      field('Winkel [°]', numInput(() => f.angle, v => { f.angle = v; }, { onChange: up, min: 1 })),
     ],
   });
 }
@@ -285,10 +287,10 @@ export function dashHole(feature, replaceId) {
     title: 'Bohrung', feature: f, replaceId,
     controls: up => [
       planeControls(f, 'plane', up),
-      field('X', numInput(() => f.x, v => { f.x = v; }, { onChange: up })),
-      field('Y', numInput(() => f.y, v => { f.y = v; }, { onChange: up })),
-      field('Ø', numInput(() => f.d, v => { f.d = v; }, { onChange: up, min: 0.01 })),
-      field('Tiefe (0 = durch)', numInput(() => f.depth, v => { f.depth = v; }, { onChange: up, min: 0 })),
+      field('X [mm]', numInput(() => f.x, v => { f.x = v; }, { onChange: up })),
+      field('Y [mm]', numInput(() => f.y, v => { f.y = v; }, { onChange: up })),
+      field('Ø [mm]', numInput(() => f.d, v => { f.d = v; }, { onChange: up, min: 0.01 })),
+      field('Tiefe [mm] (0 = durch)', numInput(() => f.depth, v => { f.depth = v; }, { onChange: up, min: 0 })),
       checkCtl('Richtung umkehren', () => f.flip, v => { f.flip = v; }, up),
     ],
   });
@@ -305,10 +307,10 @@ export function dashPrimitive(feature, replaceId) {
     title: f.type === 'sphere' ? 'Kugel' : 'Kegel', feature: f, replaceId,
     controls: up => [
       planeControls(f, 'plane', up),
-      field('X', numInput(() => f.x, v => { f.x = v; }, { onChange: up })),
-      field('Y', numInput(() => f.y, v => { f.y = v; }, { onChange: up })),
-      ...(f.type === 'sphere' ? [field('Radius', numInput(() => f.r, v => { f.r = v; }, { onChange: up, min: 0.01 }))]
-        : [field('Radius unten', numInput(() => f.r1, v => { f.r1 = v; }, { onChange: up })), field('Radius oben', numInput(() => f.r2, v => { f.r2 = v; }, { onChange: up })), field('Höhe', numInput(() => f.h, v => { f.h = v; }, { onChange: up, min: 0.01 }))]),
+      field('X [mm]', numInput(() => f.x, v => { f.x = v; }, { onChange: up })),
+      field('Y [mm]', numInput(() => f.y, v => { f.y = v; }, { onChange: up })),
+      ...(f.type === 'sphere' ? [field('Radius [mm]', numInput(() => f.r, v => { f.r = v; }, { onChange: up, min: 0.01 }))]
+        : [field('Radius unten [mm]', numInput(() => f.r1, v => { f.r1 = v; }, { onChange: up })), field('Radius oben [mm]', numInput(() => f.r2, v => { f.r2 = v; }, { onChange: up })), field('Höhe [mm]', numInput(() => f.h, v => { f.h = v; }, { onChange: up, min: 0.01 }))]),
       field('Typ', selectCtl(modeOptions, () => f.mode, v => { f.mode = v; }, up)),
     ],
   });
@@ -332,11 +334,20 @@ export function cmdEdgeOp(kind) {
   closeDashboard(); clearSel();
   const info = h('span', { class: 'dhint' });
   const upd = () => { info.textContent = f.all ? 'Alle Kanten' : `${S.sel.filter(s => s.type === 'edge').length} Kante(n) gewählt (Strg+Klick für mehrere)`; };
+  // Live-Vorschau: sofort nach dem Anklicken einer Kante bzw. nach Änderung des Radius
+  const run = () => {
+    f.edges = S.sel.filter(s => s.type === 'edge').map(s => s.mid);
+    upd();
+    S.preview = (f.all || f.edges.length) ? { feature: f } : null;
+    regen();
+  };
+  let timer = 0;
+  const later = () => { clearTimeout(timer); timer = setTimeout(run, 140); };
   openDashboard({
     title: label, feature: f, preview: false,
     controls: () => [
-      field('Radius / Abstand', numInput(() => f.r, v => { f.r = v; }, { min: 0.01 })),
-      checkCtl('Alle Kanten', () => f.all, v => { f.all = v; upd(); }),
+      field('Radius / Abstand [mm]', numInput(() => f.r, v => { f.r = v; }, { min: 0.01, onChange: later })),
+      checkCtl('Alle Kanten', () => f.all, v => { f.all = v; }, run),
       info,
     ],
     onOk: async () => {
@@ -346,11 +357,13 @@ export function cmdEdgeOp(kind) {
     },
     onCancel: () => clearSel(),
   });
+  dash.afterEdit = later;
+  S.edgeOp = { baseMesh: S.mesh };
   S.viewer.filter = { face: false, edge: true, datum: false, body: false };
-  pickOnce(label + ': Kanten im Grafikfenster anklicken …', pk => !!pk && pk.type === 'edge', pk => {
+  pickOnce(label + ': Kanten anklicken – die Vorschau erscheint sofort …', pk => !!pk && pk.type === 'edge', pk => {
     const i = S.sel.findIndex(s => s.type === 'edge' && s.id === pk.id);
     if (i >= 0) S.sel.splice(i, 1); else S.sel.push(pk);
-    refreshHighlights(); upd();
+    refreshHighlights(); run();
   }, { once: false });
   upd();
 }
@@ -416,10 +429,10 @@ export function dashPattern(feature, replaceId) {
     controls: up => [
       field('Quelle', selectCtl(srcs.map(s => ({ v: s.id, l: s.name })), () => f.source, v => { f.source = v; }, up)),
       field('Anzahl', numInput(() => f.count, v => { f.count = Math.max(2, Math.round(v)); }, { step: 1, min: 2, onChange: up })),
-      field('Abstand X', numInput(() => f.dx, v => { f.dx = v; }, { onChange: up })),
-      field('Abstand Y', numInput(() => f.dy, v => { f.dy = v; }, { onChange: up })),
+      field('Abstand X [mm]', numInput(() => f.dx, v => { f.dx = v; }, { onChange: up })),
+      field('Abstand Y [mm]', numInput(() => f.dy, v => { f.dy = v; }, { onChange: up })),
     ],
-    hint: 'Abstände in den Skizzenkoordinaten der Quelle',
+    hint: 'Abstände in mm, in den Skizzenkoordinaten der Quelle',
   });
 }
 
@@ -429,12 +442,12 @@ export function dashImport(feature, replaceId) {
     title: 'Import: ' + (S.project.imports[f.importId]?.name || ''), feature: f, replaceId,
     controls: up => [
       field('Typ', selectCtl([{ v: 'add', l: 'Hinzufügen' }, { v: 'cut', l: 'Entfernen' }], () => f.mode, v => { f.mode = v; }, up)),
-      field('X', numInput(() => f.t[0], v => { f.t[0] = v; }, { onChange: up })),
-      field('Y', numInput(() => f.t[1], v => { f.t[1] = v; }, { onChange: up })),
-      field('Z', numInput(() => f.t[2], v => { f.t[2] = v; }, { onChange: up })),
-      field('Rot X°', numInput(() => f.r[0], v => { f.r[0] = v; }, { onChange: up })),
-      field('Rot Y°', numInput(() => f.r[1], v => { f.r[1] = v; }, { onChange: up })),
-      field('Rot Z°', numInput(() => f.r[2], v => { f.r[2] = v; }, { onChange: up })),
+      field('X [mm]', numInput(() => f.t[0], v => { f.t[0] = v; }, { onChange: up })),
+      field('Y [mm]', numInput(() => f.t[1], v => { f.t[1] = v; }, { onChange: up })),
+      field('Z [mm]', numInput(() => f.t[2], v => { f.t[2] = v; }, { onChange: up })),
+      field('Rot X [°]', numInput(() => f.r[0], v => { f.r[0] = v; }, { onChange: up })),
+      field('Rot Y [°]', numInput(() => f.r[1], v => { f.r[1] = v; }, { onChange: up })),
+      field('Rot Z [°]', numInput(() => f.r[2], v => { f.r[2] = v; }, { onChange: up })),
       field('Maßstab', numInput(() => f.s, v => { f.s = v; }, { onChange: up, min: 0.0001 })),
       h('button', { class: 'btn small', title: 'Zoll nach mm', onclick: () => { f.s = 25.4; dashImport(f, replaceId); } }, '×25,4'),
     ],
@@ -457,7 +470,7 @@ export function editFeature(id) {
     case 'fillet': case 'chamfer':
       return openDashboard({
         title: featureLabel(f), feature: JSON.parse(JSON.stringify(f)), replaceId: id, preview: true,
-        controls: up => [field('Radius / Abstand', numInput(() => dash.feature.r, v => { dash.feature.r = v; }, { onChange: up, min: 0.01 }))],
+        controls: up => [field('Radius / Abstand [mm]', numInput(() => dash.feature.r, v => { dash.feature.r = v; }, { onChange: up, min: 0.01 }))],
       });
     default: return;
   }
@@ -517,12 +530,12 @@ export function dashMoveComponent(id) {
     controls: () => {
       const up = () => { apply(); regen(); };
       return [
-        field('Δ X', numInput(() => 0, v => { d.t[0] = v; }, { onChange: up })),
-        field('Δ Y', numInput(() => 0, v => { d.t[1] = v; }, { onChange: up })),
-        field('Δ Z', numInput(() => 0, v => { d.t[2] = v; }, { onChange: up })),
-        field('Rot X°', numInput(() => 0, v => { d.r[0] = v; }, { onChange: up })),
-        field('Rot Y°', numInput(() => 0, v => { d.r[1] = v; }, { onChange: up })),
-        field('Rot Z°', numInput(() => 0, v => { d.r[2] = v; }, { onChange: up })),
+        field('Δ X [mm]', numInput(() => 0, v => { d.t[0] = v; }, { onChange: up })),
+        field('Δ Y [mm]', numInput(() => 0, v => { d.t[1] = v; }, { onChange: up })),
+        field('Δ Z [mm]', numInput(() => 0, v => { d.t[2] = v; }, { onChange: up })),
+        field('Rot X [°]', numInput(() => 0, v => { d.r[0] = v; }, { onChange: up })),
+        field('Rot Y [°]', numInput(() => 0, v => { d.r[1] = v; }, { onChange: up })),
+        field('Rot Z [°]', numInput(() => 0, v => { d.r[2] = v; }, { onChange: up })),
       ];
     },
     onOk: async () => {
@@ -544,7 +557,7 @@ export async function cmdMate() {
       const r = await modal('Verbindungsart', body => {
         const sel = selectCtl([{ v: 'mate', l: 'Passend (Flächen liegen gegenüber)' }, { v: 'align', l: 'Bündig (Flächen in gleiche Richtung)' }], () => 'mate', () => {});
         const off = h('input', { type: 'number', value: 0, step: 'any', class: 'num' });
-        body.append(field('Art', sel), field('Abstand', off));
+        body.append(field('Art', sel), field('Abstand [mm]', off));
         return () => ({ kind: sel.value, off: parseFloat(off.value) || 0 });
       }, [{ label: 'Abbrechen', value: null }, { label: 'OK', primary: true, value: 'form' }]);
       if (!r) { clearSel(); return; }

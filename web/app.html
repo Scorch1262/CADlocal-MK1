@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BrowserCAD</title>
-<link rel="stylesheet" href="/assets/common.css"><link rel="stylesheet" href="/app/app.css"></head>
+<link rel="icon" href="/assets/favicon.ico"><link rel="stylesheet" href="/assets/common.css"><link rel="stylesheet" href="/app/app.css"></head>
 <body>
 <div id="loading"><div class="lbox"><div class="brand"><span class="logo"></span>BrowserCAD</div><div id="loadtext">CAD-Kern wird geladen (einmalig, ca. 14 MB) …</div><div class="bar"><div id="loadbar"></div></div></div></div>
 <div id="app">
@@ -11,6 +11,8 @@
     <div id="qbtns"></div>
     <div class="spacer"></div>
     <button id="smbtn" class="btn small" title="3Dconnexion SpaceMouse">🖱 SpaceMouse</button>
+    <button id="adminbtn" class="btn small" hidden title="Nutzerverwaltung (nur Administratoren)">👥 Nutzerverwaltung</button>
+    <button id="pwbtn" class="btn small" title="Eigenes Kennwort ändern">🔑 Kennwort</button>
     <span id="username" class="dim"></span>
     <button id="logoutbtn" class="btn small">Abmelden</button>
   </header>
@@ -29,7 +31,7 @@
     </section>
   </main>
   <footer id="dash" hidden></footer>
-  <div id="status"><span id="stmsg"></span><span class="spacer"></span><span id="sthover" class="dim"></span><span id="stsave"></span></div>
+  <div id="status"><span id="stmsg"></span><span class="spacer"></span><span id="sthover" class="dim"></span><span class="dim" title="Alle Längenmaße in Millimetern">Einheiten: mm</span><span id="stsave"></span></div>
 </div>
 <script type="module" src="/app/app.js"></script>
 </body></html>

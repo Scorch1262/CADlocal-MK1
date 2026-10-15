@@ -171,7 +171,7 @@ export class Viewer {
       if (d.matrix) { const mm = new THREE.Matrix4(); mm.set(...d.matrix); obj.matrixAutoUpdate = false; obj.matrix.copy(mm); obj.updateMatrixWorld(true); }
       obj.visible = d.visible !== false;
       this.bodyGroup.add(obj);
-      this.bodies.push({ key: d.key, itemId: d.itemId, data: m, obj, mesh, lines, baseColor: d.color || 0x9fb6d3, matrix: d.matrix });
+      this.bodies.push({ key: d.key, itemId: d.itemId, data: m, obj, mesh, lines, baseColor: d.color || 0x9fb6d3, matrix: d.matrix, ghost: !!d.ghost, nopick: !!d.nopick });
     }
     this._applyDisplayMode();
     this.requestRender();
@@ -221,6 +221,7 @@ export class Viewer {
       else if (this.displayMode === 'transparent') { mat.transparent = true; mat.opacity = 0.35; mat.depthWrite = false; }
       if (b.lines) b.lines.material.color.setHex(this.displayMode === 'wireframe' ? 0xc9d6ee : 0x141b2b);
       if (this.displayMode !== 'hidden') mat.emissive?.setHex(0x000000);
+      if (b.ghost) { mat.transparent = true; mat.opacity = 0.2; mat.depthWrite = false; }   // Originalkörper als Geist (Vorschau)
     }
   }
 
@@ -289,7 +290,7 @@ export class Viewer {
     const rc = this.rayFrom(ev);
     rc.params.Line.threshold = this.pixelWorld * 5;
     let faceHit = null, edgeHit = null, datumHit = null;
-    const solids = this.bodies.filter(b => b.obj.visible);
+    const solids = this.bodies.filter(b => b.obj.visible && !b.nopick);
     if (this.filter.face || this.filter.body) {
       for (const b of solids) {
         const hits = rc.intersectObject(b.mesh, false);
