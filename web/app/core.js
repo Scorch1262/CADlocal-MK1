@@ -24,13 +24,15 @@ export const S = {
   saving: false,
   fitNext: true,
   mode: 'idle',
+  showDims: true,
+  dimLayer: null,
 };
 
 export function setMode(m) { S.mode = m; emit('mode'); }
 export const on = (evt, fn) => { (S.listeners[evt] ||= []).push(fn); };
 export const emit = (evt, arg) => { for (const fn of S.listeners[evt] || []) { try { fn(arg); } catch (e) { console.error(evt, e); } } };
 
-export function msg(text, kind = 'info') { emit('msg', { text, kind }); if (kind === 'err') toast(text, 'err', 7000); }
+export function msg(text, kind = 'info') { emit('msg', { text, kind }); if (kind === 'err') toast(text, 'err', 7000); else if (kind === 'warn') toast(text, 'warn', 5000); }
 
 // ---------- Sichtbarkeit (Ebenen) ----------
 export function layerVisible(p, layerId) {
@@ -140,7 +142,7 @@ export async function regen(opts = {}) {
   emit('tree');
   const dt = Math.round(performance.now() - t0);
   const n = Object.keys(S.errors).length;
-  msg(n ? `Regeneration mit ${n} Fehler(n) (${dt} ms)` : `Regeneration abgeschlossen (${dt} ms)`, n ? 'warn' : 'info');
+  msg(n ? `Regeneration mit ${n} Fehler(n) (${dt} ms)` : `Regeneration abgeschlossen (${dt} ms)`, 'info');
 }
 
 function regenPart(p) {

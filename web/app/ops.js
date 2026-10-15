@@ -4,6 +4,8 @@ import { api } from './api.js';
 import { uid, resolveFrame, computeFrames, featureLabel, faceFrame, mul4, trans4, rotAbout, matFromTRS, IDENT, dot, cross, sub, mul, norm, len } from './model.js';
 import { h, modal, promptText, toast } from './ui.js';
 import { Sketcher } from './sketcher.js';
+import { resolveBodyDim } from './bodydims.js';
+import { measureDim, setDimValue } from './sketchmath.js';
 
 const $ = id => document.getElementById(id);
 
@@ -74,17 +76,30 @@ function openDashboard({ title, feature, replaceId, controls, preview = true, ok
   const d = $('dash'); d.hidden = false; d.innerHTML = '';
   const err = h('span', { class: 'derr' });
   const update = () => { if (preview) schedulePreview(); };
-  const ctl = typeof controls === 'function' ? controls(update) : controls;
+  const body = h('div', { class: 'dbody' });
+  // Eingabefelder neu aufbauen (z. B. nachdem ein Maß im Bild geändert wurde)
+  const rebuild = () => { body.innerHTML = ''; const ctl = typeof controls === 'function' ? controls(update) : controls; body.append(ctl, hint ? h('span', { class: 'dhint' }, hint) : null); };
+  rebuild();
   d.append(
     h('div', { class: 'dtitle' }, title),
-    h('div', { class: 'dbody' }, ctl, hint ? h('span', { class: 'dhint' }, hint) : null),
+    body,
     err,
     h('div', { class: 'dbtns' },
       h('button', { class: 'btn ok', title: 'Übernehmen', onclick: async () => { if (onOk) await onOk(); else await finishFeature(feature, replaceId); } }, okLabel),
       h('button', { class: 'btn cancel', title: 'Abbrechen', onclick: () => { closeDashboard(); regen(); onCancel?.(); } }, '✖')),
   );
-  dash.err = err;
+  dash.err = err; dash.rebuild = rebuild;
   if (preview) regen();
+}
+// Zugriff für das Maß-Overlay
+export const getSketcher = () => sketcher;
+export const dashFeature = () => (dash ? dash.feature : null);
+export function dashEdit(mut) {
+  if (!dash) return false;
+  mut(dash.feature);
+  if (dash.rebuild) dash.rebuild();
+  if (S.preview) schedulePreview(); else emit('dims');
+  return true;
 }
 on('regen', () => { if (dash && dash.err) dash.err.textContent = S.errors[dash.feature.id] || ''; });
 
@@ -108,7 +123,10 @@ const modeOptions = [{ v: 'add', l: 'Material hinzufügen' }, { v: 'cut', l: 'Ma
 // Skizze
 // =====================================================================
 let sketcher = null;
+let sketchRender = () => {};
 export function inSketch() { return !!sketcher; }
+// Bemaßungswerkzeug in der Skizze aktivieren (Ribbon)
+export function startSketchDimTool() { if (!sketcher) return; sketcher.setTool('dim'); sketchRender(); }
 
 async function choosePlane() {
   // bevorzugt aktuelle Auswahl (Fläche / Datumebene)
@@ -142,16 +160,17 @@ export async function startSketch({ existingId = null, after = null } = {}) {
   const v = S.viewer;
   v.lookAtFrame(frame, false);
   const panel = $('sketchpanel'); panel.hidden = false;
-  const render = () => renderSketchPanel(panel, finish, cancel);
-  sketcher = new Sketcher(v, frame, sk ? sk.entities : [], render);
+  // Tippen in Zahlenfeldern ('edit') baut das Panel nicht neu auf (Fokus bleibt), alle anderen Änderungen schon
+  const render = kind => { sketchRender = () => renderSketchPanel(panel, finish, cancel); if (kind !== 'edit') sketchRender(); emit('dims'); };
+  sketcher = new Sketcher(v, frame, sk ? sk.entities : [], render, sk ? sk.dims : []);
   const finish = async () => {
-    const ents = sketcher.entities;
+    const ents = sketcher.entities; const sdims = sketcher.dims;
     if (!ents.length) { cancel(); msg('Leere Skizze verworfen'); return; }
     const id = sk ? sk.id : uid();
     const name = sk ? sk.name : nextName('sketch');
     sketcher.destroy(); sketcher = null; panel.hidden = true; setMode('idle');
     await commit((sk ? 'Skizze ändern: ' : 'Skizze: ') + name, p => {
-      const feat = { id, type: 'sketch', name, plane, entities: ents, layer: 'L_SKETCH', ...(sk ? { suppressed: sk.suppressed, hidden: sk.hidden, layer: sk.layer } : {}) };
+      const feat = { id, type: 'sketch', name, plane, entities: ents, dims: sdims, layer: 'L_SKETCH', ...(sk ? { suppressed: sk.suppressed, hidden: sk.hidden, layer: sk.layer } : {}) };
       if (sk) p.features = p.features.map(x => x.id === id ? feat : x); else p.features.push(feat);
     });
     v.setStandardView('iso');
@@ -168,6 +187,10 @@ function renderSketchPanel(panel, finish, cancel) {
   panel.append(
     h('div', { class: 'ptitle' }, 'Skizze'),
     h('div', { class: 'prow' }, tool('select', 'Auswahl'), tool('line', 'Linien'), tool('rect', 'Rechteck'), tool('circle', 'Kreis')),
+    h('div', { class: 'prow' }, tool('dim', '⟷ Bemaßung'),
+      sk.tool === 'dim' ? field('Art', selectCtl([{ v: 'a', l: 'Ausgerichtet' }, { v: 'h', l: 'Horizontal' }, { v: 'v', l: 'Vertikal' }], () => sk.dimMode, v => { sk.dimMode = v; })) : null,
+      checkCtl('Lagemaße', () => sk.showPos, v => { sk.showPos = v; emit('dims'); })),
+    sk.tool === 'dim' ? h('div', { class: 'dim small' }, 'Zwei Punkte anklicken (Ecken, Mittelpunkte, Kreisquadranten, Ursprung). Wert im Bild anklicken, um das Maß zu ändern.') : null,
     h('div', { class: 'prow' },
       field('Raster', numInput(() => sk.snap, v => sk.setSnap(v, sk.snapOn), { step: 'any', min: 0.1 })),
       checkCtl('Einrasten', () => sk.snapOn, v => sk.setSnap(sk.snap, v))),
@@ -183,6 +206,15 @@ function renderSketchPanel(panel, finish, cancel) {
     list.append(row);
   });
   if (!sk.entities.length) list.append(h('div', { class: 'dim' }, 'Noch keine Geometrie. Beispiel: „Rechteck“ wählen, zwei Ecken anklicken.'));
+  if (sk.dims.length) {
+    list.append(h('div', { class: 'ptitle' }, 'Maße'));
+    sk.dims.forEach(d => {
+      const val = measureDim(sk.entities, d);
+      list.append(h('div', { class: 'erow' }, h('b', null, { a: 'Abstand', h: 'Horizontal', v: 'Vertikal' }[d.mode]),
+        field('Wert', numInput(() => (val === null ? 0 : +val.toFixed(4)), v => { if (setDimValue(sk.entities, d, v)) { sk.redraw(); sk.onChange('edit'); } }, { step: 'any', min: 0.0001 })),
+        h('button', { class: 'btn small', title: 'Maß löschen', onclick: () => { sk.dims = sk.dims.filter(x => x !== d); sk.redraw(); sk.onChange('dims'); } }, '🗑')));
+    });
+  }
   panel.append(list, h('div', { class: 'prow end' },
     h('button', { class: 'btn ok', onclick: finish }, '✔ Fertig'),
     h('button', { class: 'btn cancel', onclick: cancel }, '✖ Abbrechen')));
@@ -321,6 +353,53 @@ export function cmdEdgeOp(kind) {
     refreshHighlights(); upd();
   }, { once: false });
   upd();
+}
+
+// Bemaßungswerkzeug am Körper: Referenzmaße (Kantenlänge, Ø/Radius einer Kreiskante, Abstand ebener Flächen)
+export function cmdDimBody() {
+  if (!hasSolid()) { msg('Kein Körper vorhanden.', 'warn'); return; }
+  const st = { kind: 'length', first: null };
+  closeDashboard(); clearSel();
+  const hintEl = h('span', { class: 'dhint' });
+  const add = async d => { await commit('Maß einfügen', p => { (p.dims ||= []).push({ id: uid('m'), ...d }); }, { light: true }); };
+  const arm = () => {
+    cancelPick(); st.first = null; clearSel();
+    const faces = st.kind === 'faces';
+    S.viewer.filter = faces ? { face: true, edge: false, datum: false, body: true } : { face: false, edge: true, datum: false, body: false };
+    hintEl.textContent = faces ? 'Zwei parallele ebene Flächen nacheinander anklicken' : st.kind === 'length' ? 'Kante anklicken' : 'Kreiskante anklicken';
+    if (faces) {
+      pickOnce('Abstand: erste ebene Fläche anklicken …', pk => !!pk && pk.type === 'face' && !!pk.plane, async pk => {
+        if (!st.first) { st.first = pk; S.sel = [pk]; refreshHighlights(); msg('Zweite Fläche anklicken …', 'prompt'); return; }
+        const a = st.first, b = pk; st.first = null; clearSel();
+        const n1 = norm(a.plane.n), n2 = norm(b.plane.n);
+        if (Math.abs(dot(n1, n2)) < 0.999) { toast('Die Flächen sind nicht parallel.', 'warn'); return; }
+        if (Math.abs(dot(sub(b.plane.o, a.plane.o), n1)) < 1e-9) { toast('Beide Flächen liegen in derselben Ebene.', 'warn'); return; }
+        await add({ kind: 'faces', f1: { o: a.plane.o, n: n1 }, f2: { o: b.plane.o, n: n2 }, anchor: a.point.toArray ? a.point.toArray() : a.point });
+        msg('Maß eingefügt. Weitere Flächen anklicken oder ✔.', 'prompt');
+      }, { once: false });
+    } else {
+      pickOnce(st.kind === 'length' ? 'Kante anklicken …' : 'Kreiskante anklicken …', pk => !!pk && pk.type === 'edge' && !!pk.mid, async pk => {
+        const d = { kind: st.kind, mid: pk.mid, anchor: pk.mid };
+        if (resolveBodyDim(S.mesh, d).stale) { toast(st.kind === 'length' ? 'Kante nicht gefunden.' : 'Das ist keine Kreiskante.', 'warn'); return; }
+        await add(d);
+        msg('Maß eingefügt. Weitere Kante anklicken oder ✔.', 'prompt');
+      }, { once: false });
+    }
+  };
+  openDashboard({
+    title: 'Bemaßung', feature: { id: 'dimtool' }, preview: false, okLabel: '✔',
+    controls: () => [
+      field('Art', selectCtl([{ v: 'length', l: 'Kantenlänge' }, { v: 'diam', l: 'Durchmesser (Kreiskante)' }, { v: 'radius', l: 'Radius (Kreiskante)' }, { v: 'faces', l: 'Abstand Fläche–Fläche' }], () => st.kind, v => { st.kind = v; arm(); })),
+      hintEl,
+    ],
+    onOk: async () => { closeDashboard(); clearSel(); },
+    onCancel: () => clearSel(),
+  });
+  arm();
+}
+export async function clearBodyDims() {
+  if (!(S.project.dims || []).length) return;
+  await commit('Alle Maße löschen', p => { p.dims = []; }, { light: true });
 }
 
 export function cmdPattern() {

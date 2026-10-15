@@ -54,6 +54,11 @@ Skizze (Linien/Rechteck/Kreis, Raster, numerische Bearbeitung) auf FRONT/TOP/RIG
 **Ansicht:** Standardorientierung, Front/Oben/Rechts/…, perspektivisch/orthogonal, schattiert mit Kanten / schattiert / Drahtmodell / verdeckte Linien / transparent, Datumebenen ein/aus, Bildschirmfoto.
 Navigation wie Creo: Mitteltaste = drehen, Strg+Mitteltaste/Rad = zoomen, Umschalt+Mitteltaste = verschieben (ohne Mittelmaustaste: Alt+Linke Taste).
 
+**Maße / Bemaßung:**
+* **Maße im Bild:** Sobald eine Skizze oder ein Feature (Extrusion, Bohrung, Kugel, Kegel, Muster, Rundung …) in Bearbeitung ist – oder im Modellbaum gewählt wird –, werden dessen Maße direkt im Grafikfenster eingeblendet. **Anklicken eines Maßes** öffnet ein Eingabefeld (Enter übernimmt, Esc verwirft); die Geometrie wird sofort neu berechnet. Rechtsklick auf ein Maß: bearbeiten/löschen. Ein-/Ausblenden: Ansicht → „Maße“.
+* **Bemaßungswerkzeug in der Skizze** (Register Modell → Bemaßung → „Skizzenmaß“ oder Werkzeug „⟷ Bemaßung“ im Skizzenfenster): zwei Punkte anklicken (Ecken, Mittelpunkte, Kreisquadranten, Ursprung), Art wählen (ausgerichtet/horizontal/vertikal). Das Maß steuert die Geometrie: Wert ändern verschiebt bzw. skaliert die zweite Entität. Optional „Lagemaße“ (Abstände vom Ursprung).
+* **Bemaßungswerkzeug am Körper** (Modell → Bemaßung → „Körper bemaßen“): Kantenlänge, Durchmesser/Radius einer Kreiskante, Abstand zweier paralleler ebener Flächen. Das sind **Referenzmaße**: sie werden bei jeder Regeneration neu aus der Geometrie berechnet, sind aber nicht änderbar; verschwindet das Bezugselement, erscheinen sie rot als „veraltet“. Zum Ändern einer Größe das zugehörige Feature bearbeiten (dessen Maße sind änderbar).
+
 **Analyse:** Volumen, Oberfläche, Masse (einstellbare Dichte), Schwerpunkt, Abmessungen.
 
 **Import:** `.stp/.step`, `.stl`; **Creo** (`.prt`, `.asm`) und **SolidWorks** (`.sldprt`, `.sldasm`) siehe unten.
@@ -97,7 +102,7 @@ web/login.html, register.html         Anmelde- und „Nutzer anlegen“-Seite
 web/app.html, web/app/*.js            CAD-Programm (nur nach Anmeldung abrufbar)
 web/vendor/                           wird vom Workflow erzeugt (three.js, OpenCascade.js)
 scripts/fetch-vendor.mjs              kopiert die Bibliotheken nach web/vendor
-tests/kernel.test.mjs                 Test des CAD-Kerns (Node)
+tests/*.test.mjs                      Tests: CAD-Kern (Node), Maß-Logik, Oberfläche (jsdom)
 .github/workflows/build.yml           Build + Release (exe, macOS-App, Linux)
 ```
 

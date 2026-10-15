@@ -42,6 +42,7 @@ export class Viewer {
     this.onPick = () => {};
     this.onContext = () => {};
     this.onHover = () => {};
+    this.onFrame = null;       // wird nach jedem Zeichnen aufgerufen (Maß-Overlay)
     this.filter = { face: true, edge: true, datum: true, body: true };
     this.hover = null;
     this._raf = 0;
@@ -400,7 +401,7 @@ export class Viewer {
 
   requestRender() {
     if (this._raf) return;
-    this._raf = requestAnimationFrame(() => { this._raf = 0; this._updateCamera(); this.renderer.render(this.scene, this.camera); });
+    this._raf = requestAnimationFrame(() => { this._raf = 0; this._updateCamera(); this.renderer.render(this.scene, this.camera); if (this.onFrame) this.onFrame(); });
   }
   snapshot() { this._updateCamera(); this.renderer.render(this.scene, this.camera); return this.canvas.toDataURL('image/png'); }
 }

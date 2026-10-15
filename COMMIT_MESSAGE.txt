@@ -1,4 +1,4 @@
-BrowserCAD v1.1.0: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
+BrowserCAD v1.2.0: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
 
 - Go-Server stellt die Webseite im Netzwerk bereit (HTTP 8080, optional HTTPS 8443
   mit selbstsigniertem Zertifikat)
@@ -18,3 +18,8 @@ BrowserCAD v1.1.0: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
 - GitHub Actions: Tests, Windows-exe, macOS-App (universal), Linux-Binary und
   automatisches Release
 - Versionsnummer aus Datei VERSION, im Release, in der Konsole und im Programm sichtbar
+- Bemaßung: Maße werden im Grafikfenster eingeblendet (Skizze und Feature in Bearbeitung)
+  und lassen sich per Klick einzeln ändern; eigenes Bemaßungswerkzeug für Skizzen
+  (steuernde Maße zwischen Punkten) und für Körper (Referenzmaße)
+- Log-Bereich unten im Bild entfernt (Meldungen nur noch als Hinweis/Statuszeile)
+- Neue Tests: Maß-Logik, Körper-Referenzmaße und Oberfläche (jsdom)

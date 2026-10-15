@@ -8,6 +8,7 @@ import { newProject, uid, faceFrame, featureLabel } from './model.js';
 import { h, modal, promptText, confirmBox, info, toast, ctxMenu, download, b64encode, fmt } from './ui.js';
 import * as ops from './ops.js';
 import { initPanels, showTab, refreshFiles } from './panels.js';
+import { initDims } from './dims.js';
 
 const $ = id => document.getElementById(id);
 
@@ -44,6 +45,7 @@ const P = {
   move: '<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/>',
   add: '<path d="M12 5v14M5 12h14"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  dim: '<path d="M4 7v10M20 7v10M4 12h16M4 12l3-2M4 12l3 2M20 12l-3-2M20 12l-3 2"/>',
   zip: '<path d="M5 3h10l4 4v14H5z"/><path d="M11 3v6M11 11v2M11 15v2"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17v.5"/>',
   power: '<path d="M12 3v9M6.5 6.5a8 8 0 1 0 11 0"/>',
@@ -53,9 +55,8 @@ const ico = n => h('span', { html: `<svg viewBox="0 0 24 24">${P[n] || P.cube}</
 
 // ---------------- Meldungen / Status ----------------
 on('msg', ({ text, kind }) => {
-  const m = h('div', { class: 'm ' + kind }, `${new Date().toLocaleTimeString('de-DE')}  ${text}`);
-  const a = $('msgarea'); a.append(m); while (a.children.length > 200) a.firstChild.remove();
-  a.scrollTop = a.scrollHeight; $('stmsg').textContent = text;
+  // Kein Log mehr: nur die Statuszeile und – bei Aufforderungen – der Hinweis im Bild
+  $('stmsg').textContent = text;
   const hint = $('hint');
   if (kind === 'prompt') { hint.hidden = false; hint.textContent = text; } else if (!S.pickHandler) hint.hidden = true;
 });
@@ -222,6 +223,7 @@ async function showAnalysis() {
 // ---------------- Ansicht ----------------
 const viewBtn = (label, icon, run, opt = {}) => ({ label, icon, run, ...opt });
 function setView(n) { S.viewer.setStandardView(n); }
+function toggleDims() { S.showDims = !S.showDims; emit('dims'); renderRibbon(); msg(S.showDims ? 'Maße eingeblendet' : 'Maße ausgeblendet'); }
 
 // ---------------- Ribbon ----------------
 let activeTab = 'modell';
@@ -243,6 +245,7 @@ function ribbonDefs() {
       ['Form', [viewBtn('Extrusion', 'extrude', ops.cmdExtrude, { off: !(part && idle) }), viewBtn('Rotation', 'revolve', ops.cmdRevolve, { off: !(part && idle) }), viewBtn('Kugel', 'sphere', () => ops.cmdPrimitive('sphere'), { off: !(part && idle) }), viewBtn('Kegel', 'cone', () => ops.cmdPrimitive('cone'), { off: !(part && idle) })]],
       ['Konstruktionselemente', [viewBtn('Bohrung', 'hole', ops.cmdHole, { off: !(part && idle) }), viewBtn('Rundung', 'fillet', () => ops.cmdEdgeOp('fillet'), { off: !(part && idle) }), viewBtn('Fase', 'chamfer', () => ops.cmdEdgeOp('chamfer'), { off: !(part && idle) })]],
       ['Muster', [viewBtn('Linear', 'pattern', ops.cmdPattern, { off: !(part && idle) })]],
+      ['Bemaßung', [viewBtn('Skizzenmaß', 'dim', ops.startSketchDimTool, { off: !ops.inSketch(), active: ops.inSketch() && ops.getSketcher().tool === 'dim' }), viewBtn('Körper bemaßen', 'dim', ops.cmdDimBody, { off: !(part && idle) }), viewBtn('Maße ein/aus', 'dim', toggleDims, { active: S.showDims }), viewBtn('Körpermaße löschen', 'trash', ops.clearBodyDims, { off: !(part && idle) })]],
       ['Daten', [viewBtn('Importieren', 'import', importFileDialog, { off: !idle })]],
       ['Operationen', [viewBtn('Rückgängig', 'undo', undo, { off: !idle }), viewBtn('Wiederholen', 'redo', redo, { off: !idle }), viewBtn('Regenerieren', 'regen', () => regen({ fit: false }), { off: !idle })]],
     ],
@@ -256,7 +259,7 @@ function ribbonDefs() {
       ['Orientierung', [viewBtn('Standard', 'cube', () => setView('iso')), viewBtn('Front', 'cube', () => setView('front')), viewBtn('Oben', 'cube', () => setView('top')), viewBtn('Rechts', 'cube', () => setView('right')), viewBtn('Hinten', 'cube', () => setView('back')), viewBtn('Unten', 'cube', () => setView('bottom')), viewBtn('Links', 'cube', () => setView('left'))]],
       ['Zoom', [viewBtn('Anpassen', 'fit', () => { S.viewer.fit(); }), viewBtn('Perspektive', 'ortho', () => { const o = S.viewer.toggleOrtho(); msg(o ? 'Orthogonale Ansicht' : 'Perspektivische Ansicht'); })]],
       ['Darstellung', [['shaded-edges', 'Schattiert + Kanten', 'shade'], ['shaded', 'Schattiert', 'shade'], ['wireframe', 'Drahtmodell', 'wire'], ['hidden', 'Verdeckte Linien', 'wire'], ['transparent', 'Transparent', 'wire']].map(([m, l, i]) => viewBtn(l, i, () => { S.viewer.setDisplayMode(m); renderRibbon(); }, { active: S.viewer?.displayMode === m }))],
-      ['Anzeige', [viewBtn('Datumebenen', 'planes', () => { S.viewer.setShowDatums(!S.viewer.showDatums); renderRibbon(); }, { active: S.viewer?.showDatums }), viewBtn('Bild', 'cam', () => download(baseName() + '.png', dataUrlToBlob(S.viewer.snapshot()), 'image/png'))]],
+      ['Anzeige', [viewBtn('Datumebenen', 'planes', () => { S.viewer.setShowDatums(!S.viewer.showDatums); renderRibbon(); }, { active: S.viewer?.showDatums }), viewBtn('Maße', 'dim', toggleDims, { active: S.showDims }), viewBtn('Bild', 'cam', () => download(baseName() + '.png', dataUrlToBlob(S.viewer.snapshot()), 'image/png'))]],
     ],
     analyse: [['Modell', [viewBtn('Masseneigenschaften', 'analysis', showAnalysis)]]],
     werkzeuge: [
@@ -385,6 +388,7 @@ async function boot() {
     document.querySelector('.qbrand').append(h('small', { class: 'dim', style: { fontWeight: 400, marginLeft: '4px' } }, S.info.version || ''));
   } catch (e) { return; }
   S.viewer = new Viewer($('viewport'));
+  initDims(S.viewer, $('center'));
   S.viewer.onPick = handlePick;
   S.viewer.onContext = viewContext;
   S.viewer.onHover = p => { $('sthover').textContent = p ? (p.type === 'face' ? 'Fläche' : p.type === 'edge' ? 'Kante' : 'Datumebene') : ''; };

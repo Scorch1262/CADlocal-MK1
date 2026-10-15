@@ -1,12 +1,17 @@
 // sketcher.js – einfacher 2D-Skizzierer auf einer Ebene (Frame). Entitäten: rect, circle, poly.
 import * as THREE from '/vendor/three.module.js';
-import { toGlobal, entityLoops } from './model.js';
+import { toGlobal, entityLoops, uid } from './model.js';
+import { pointOf, snapPoints, measureDim, setDimValue, dropEntityFromDims, autoDims, setAutoDim } from './sketchmath.js';
+import { fmt } from './ui.js';
 
 export class Sketcher {
-  constructor(viewer, frame, entities, onChange) {
+  constructor(viewer, frame, entities, onChange, dims) {
     this.v = viewer;
     this.frame = frame;
     this.entities = JSON.parse(JSON.stringify(entities || []));
+    this.dims = JSON.parse(JSON.stringify(dims || []));   // Maße des Bemaßungswerkzeugs
+    this.dimMode = 'a';                                   // a = ausgerichtet, h = horizontal, v = vertikal
+    this.showPos = false;                                 // Lagemaße (Abstand der Mittelpunkte vom Ursprung)
     this.onChange = onChange || (() => {});
     this.tool = 'select';
     this.snap = 5;
@@ -66,17 +71,41 @@ export class Sketcher {
     return [+u.toFixed(4), +v.toFixed(4)];
   }
 
+  _raw(ev) {
+    const r = this.v.rayToFrame(ev, this.frame); return r ? [r.u, r.v] : null;
+  }
+  _nearestSnap(raw) {
+    if (!raw) return null;
+    let best = null, bd = this.v.pixelWorld * 16;
+    for (const sp of snapPoints(this.entities)) { const d = Math.hypot(sp.u - raw[0], sp.v - raw[1]); if (d < bd) { bd = d; best = sp; } }
+    return best;
+  }
+
   _handlers() {
     return {
       down: () => {},
       up: ev => this._click(ev),
-      move: ev => { this.cursor = this._pt(ev); if (this.pending) this.redraw(); },
+      move: ev => {
+        if (this.tool === 'dim') { this.cursor = this._raw(ev); this.redraw(); return; }
+        this.cursor = this._pt(ev); if (this.pending) this.redraw();
+      },
       dbl: () => { if (this.tool === 'line') this._finishPoly(); },
       context: () => { if (this.pending) { this.pending = null; this.redraw(); } else this.setTool('select'), this.onChange('tool'); },
     };
   }
 
   _click(ev) {
+    if (this.tool === 'dim') {
+      const sp = this._nearestSnap(this._raw(ev)); if (!sp) return;
+      if (!this.pending) this.pending = { dimA: sp.ref };
+      else {
+        const a = this.pending.dimA, b = sp.ref;
+        if (a.e === b.e && a.p === b.p) return;
+        this.dims.push({ id: uid('m'), mode: this.dimMode, a, b });
+        this.pending = null; this.onChange('dims');
+      }
+      this.redraw(); return;
+    }
     const p = this._pt(ev); if (!p) return;
     if (this.tool === 'rect') {
       if (!this.pending) this.pending = { a: p };
@@ -127,8 +156,38 @@ export class Sketcher {
     return -1;
   }
 
-  removeSelected() { if (this.sel >= 0) { this.entities.splice(this.sel, 1); this.sel = -1; this.onChange('remove'); this.redraw(); } }
+  removeSelected() { if (this.sel >= 0) { this.dims = dropEntityFromDims(this.dims, this.sel); this.entities.splice(this.sel, 1); this.sel = -1; this.onChange('remove'); this.redraw(); } }
   update(i, patch) { Object.assign(this.entities[i], patch); this.redraw(); this.onChange('edit'); }
+
+  // Maße für das Overlay (3D-Koordinaten); onEdit ändert die Skizze
+  dimItems() {
+    const fr = this.frame;
+    const G = (u, v) => toGlobal(fr, u, v, 0);
+    const D = (du, dv) => { const l = Math.hypot(du, dv) || 1; return [(fr.x[0] * du + fr.y[0] * dv) / l, (fr.x[1] * du + fr.y[1] * dv) / l, (fr.x[2] * du + fr.y[2] * dv) / l]; };
+    const items = [];
+    for (const it of autoDims(this.entities, this.showPos)) {
+      items.push({
+        kind: 'lin', key: it.key, a: G(...it.a), b: G(...it.b), base1: G(...it.a), base2: G(...it.b),
+        dir: it.dir[0] || it.dir[1] ? D(...it.dir) : [0, 0, 0], offPx: it.kind === 'diam' ? 0 : 34,
+        label: (it.kind === 'diam' ? 'Ø' : '') + fmt(it.value), value: it.value,
+        onEdit: v => { if (setAutoDim(this.entities, it, v)) { this.redraw(); this.onChange('dimedit'); } },
+      });
+    }
+    for (const d of this.dims) {
+      const A = pointOf(this.entities, d.a), B = pointOf(this.entities, d.b); if (!A || !B) continue;
+      let base1, base2, dir;
+      if (d.mode === 'h') { const y0 = Math.max(A[1], B[1]); base1 = G(A[0], y0); base2 = G(B[0], y0); dir = D(0, 1); }
+      else if (d.mode === 'v') { const x0 = Math.max(A[0], B[0]); base1 = G(x0, A[1]); base2 = G(x0, B[1]); dir = D(1, 0); }
+      else { base1 = G(...A); base2 = G(...B); dir = D(-(B[1] - A[1]), B[0] - A[0]); }
+      const value = measureDim(this.entities, d);
+      items.push({
+        kind: 'lin', key: d.id, cls: 'user', a: G(...A), b: G(...B), base1, base2, dir, offPx: 34, label: fmt(value), value,
+        onEdit: v => { if (setDimValue(this.entities, d, v)) { this.redraw(); this.onChange('dimedit'); } },
+        onDelete: () => { this.dims = this.dims.filter(x => x !== d); this.redraw(); this.onChange('dims'); },
+      });
+    }
+    return items;
+  }
 
   redraw() {
     for (const c of [...this.group.children]) if (c !== this.grid) { this.group.remove(c); c.geometry?.dispose(); }
@@ -142,8 +201,14 @@ export class Sketcher {
     this.entities.forEach((e, i) => {
       for (const loop of entityLoops(e)) addLine(loop, i === this.sel ? 0xff9a2e : 0xffe066, true);
     });
+    // Bemaßungswerkzeug: Fangpunkt-Markierung und Vorschaulinie
+    if (this.tool === 'dim') {
+      const sp = this._nearestSnap(this.cursor);
+      if (sp) { const k = this.v.pixelWorld * 6; addLine([[sp.u - k, sp.v - k], [sp.u + k, sp.v - k], [sp.u + k, sp.v + k], [sp.u - k, sp.v + k]], 0x7fd1ff); }
+      if (this.pending && this.pending.dimA) { const A = pointOf(this.entities, this.pending.dimA); const t = sp ? [sp.u, sp.v] : this.cursor; if (A && t) addLine([A, t], 0x7fd1ff, false); }
+    }
     // Vorschau
-    if (this.pending && this.cursor) {
+    if (this.pending && this.cursor && this.tool !== 'dim') {
       const c = this.cursor;
       if (this.tool === 'rect') {
         const a = this.pending.a; addLine([[a[0], a[1]], [c[0], a[1]], [c[0], c[1]], [a[0], c[1]]], 0x7fd1ff);

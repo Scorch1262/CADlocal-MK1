@@ -23,6 +23,7 @@ fs.unlinkSync(tmp);
 
 const { createKernel } = await import(pathToFileURL(path.join(root, 'web', 'app', 'kernel.js')).href);
 const { newProject, uid } = await import(pathToFileURL(path.join(root, 'web', 'app', 'model.js')).href);
+const { resolveBodyDim, fitCircle, edgePolyline } = await import(pathToFileURL(path.join(root, 'web', 'app', 'bodydims.js')).href);
 const K = createKernel(oc);
 
 let fails = 0;
@@ -53,6 +54,28 @@ ok('Rundung alle Kanten', !r.errors.fl1 && mp2.volume < mp.volume, 'V=' + mp2.vo
 const m = K.tessellate(r.shape);
 ok('Tessellation', m.indices.length > 100 && m.positions.length > 100 && m.edgeRanges.length > 10, `Dreiecke=${m.indices.length / 3} Kanten=${m.edgeRanges.length} Flächen=${m.faces.length}`);
 ok('Ebene für Flächen', m.faces.some(f => f.plane));
+
+
+// 3b) Referenzmaße am Körper (Kantenlänge, Durchmesser, Abstand Fläche–Fläche)
+{
+  const q = newProject('part', 'dims');
+  q.features.push({ id: 's', type: 'sketch', plane: { ref: 'FRONT' }, entities: [{ type: 'rect', cx: 0, cy: 0, w: 40, h: 30 }] }, { id: 'e', type: 'extrude', sketch: 's', depth: 20, mode: 'add' },
+    { id: 'h', type: 'hole', plane: { ref: 'FRONT', offset: 20 }, x: 0, y: 0, d: 10, depth: 0 });
+  const rq = K.regenerate(q); const mq = K.tessellate(rq.shape);
+  let diam = null, len40 = null;
+  for (const r of mq.edgeRanges) {
+    const dm = resolveBodyDim(mq, { kind: 'diam', mid: r.mid, anchor: r.mid }); if (!dm.stale) diam = dm.value;
+    const ln = resolveBodyDim(mq, { kind: 'length', mid: r.mid, anchor: r.mid }); if (!ln.stale && Math.abs(ln.value - 40) < 1e-6) len40 = ln.value;
+  }
+  ok('Bohrungsdurchmesser aus Kante = 10', diam !== null && Math.abs(diam - 10) < 0.05, 'Ø=' + diam);
+  ok('Kantenlänge 40 gefunden', len40 !== null);
+  const fz = mq.faces.filter(f => f.plane && Math.abs(f.plane.n[2]) > 0.99);
+  const f1 = fz[0].plane, f2 = fz.find(f => Math.abs(f.plane.o[2] - f1.o[2]) > 1).plane;
+  const fd = resolveBodyDim(mq, { kind: 'faces', f1: { o: f1.o, n: f1.n }, f2: { o: f2.o, n: f2.n }, anchor: f1.o });
+  ok('Abstand Fläche–Fläche = 20', !fd.stale && Math.abs(fd.value - 20) < 1e-6, 'd=' + fd.value);
+  ok('Veraltetes Maß erkannt', resolveBodyDim(mq, { kind: 'length', mid: [999, 999, 999], anchor: [0, 0, 0] }).stale === true);
+  K.release(rq.scope);
+}
 
 // 4) Kantenauswahl per Mittelpunkt (Fase)
 const q = newProject('part', 'q');

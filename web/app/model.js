@@ -28,6 +28,7 @@ export function newProject(type = 'part', name = 'neu') {
     features: [],     // nur Teile
     components: [],   // nur Baugruppen
     imports: {},      // importId -> { name, format:'step'|'stl', data }
+    dims: [],         // Referenzmaße am Körper (Bemaßungswerkzeug)
     params: { density: 7.85 }, // g/cm³ (Stahl)
   };
 }
