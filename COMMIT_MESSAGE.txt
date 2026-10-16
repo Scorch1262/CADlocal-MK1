@@ -1,5 +1,6 @@
-BrowserCAD v1.3.0: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
+BrowserCAD v1.3.1: browserbasiertes CAD als Netzwerk-Webserver (exe + macOS-App)
 
+- README: Banner-Bild (docs/banner.png) eingebunden
 - Go-Server stellt die Webseite im Netzwerk bereit (HTTP 8080, optional HTTPS 8443
   mit selbstsigniertem Zertifikat)
 - Seite "Nutzer anlegen" (/register) und Anmeldung (/login); das CAD-Programm ist

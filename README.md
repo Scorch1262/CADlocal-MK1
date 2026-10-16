@@ -1,5 +1,7 @@
 # BrowserCAD
 
+![BrowserCAD – browserbasiertes CAD mit Bemaßung, Baugruppen und STEP/STL](docs/banner.png)
+
 **Programm-Icon:** Würfel mit Bohrung und Maßlinie (`build/icon-1024.png`, `build/icon.ico`, `build/icon.iconset/`) – eingebettet in die Windows-exe (Ressource), in die macOS-App (`icon.icns`) und als Favicon/Logo im Browser.
 
 Version: siehe Datei `VERSION` (Basis) – das Release trägt `v<VERSION>.<Lauf-Nr.>`, z. B. `v1.1.7`. Die Version steht in der Konsole, oben im Programm und im Dialog Werkzeuge → Info.
